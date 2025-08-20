@@ -5,6 +5,7 @@ import hashlib
 import tkinter as tk
 from tkinter import ttk, messagebox
 from ui.login_window import LoginWindow
+from auth.user_management import UserManagementView 
 
 class AuthManager:
     def __init__(self, database):
@@ -65,3 +66,18 @@ class AuthManager:
             
         # Verificar permisos específicos
         return user_info['role'] == required_role
+    
+    def show_user_management(self, parent):
+        """Mostrar ventana de gestión de usuarios"""
+        # Verificar permisos de administrador
+        if not self.has_permission('admin'):
+            messagebox.showerror("Error", "Solo los administradores pueden acceder a la gestión de usuarios")
+            return
+        
+        # Crear ventana de gestión de usuarios
+        management_window = tk.Toplevel(parent)
+        management_window.title("Gestión de Usuarios - PapaSoft")
+        management_window.geometry("800x600")
+        management_window.transient(parent)
+        
+        user_management = UserManagementView(management_window, self.db, self)

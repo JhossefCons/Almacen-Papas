@@ -245,3 +245,31 @@ class LoansController:
         
         results = self.db.execute_query(query, params)
         return [dict(row) for row in results] if results else []
+    
+    def get_loans_summary_for_chart(self):
+        """Obtener resumen de préstamos para gráficos"""
+        return self.get_loans()  # Ya tenemos este método
+    
+    def get_monthly_loan_summary(self, year=None):
+        """Obtener resumen mensual de préstamos para gráficos"""
+        if not year:
+            year = datetime.now().year
+        
+        query = """
+            SELECT 
+                strftime('%Y-%m', date_issued) as month,
+                SUM(amount) as total_issued,
+                COALESCE(
+                    (SELECT SUM(amount) 
+                     FROM loan_payments lp 
+                     WHERE strftime('%Y-%m', lp.payment_date) = strftime('%Y-%m', l.date_issued)), 
+                    0
+                ) as total_paid
+            FROM loans l
+            WHERE strftime('%Y', date_issued) = ?
+            GROUP BY strftime('%Y-%m', date_issued)
+            ORDER BY month
+        """
+        
+        results = self.db.execute_query(query, (str(year),))
+        return [dict(row) for row in results] if results else []

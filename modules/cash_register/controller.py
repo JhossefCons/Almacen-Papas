@@ -161,3 +161,23 @@ class CashRegisterController:
         
         results = self.db.execute_query(query, (start_date, end_date))
         return [dict(row) for row in results] if results else []
+    
+    def get_monthly_summary(self, year=None):
+    """Obtener resumen mensual para gráficos"""
+    if not year:
+        year = datetime.now().year
+    
+    query = """
+        SELECT 
+            strftime('%Y-%m', date) as month,
+            SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+            SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense,
+            SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END) as balance
+        FROM cash_register 
+        WHERE strftime('%Y', date) = ?
+        GROUP BY strftime('%Y-%m', date)
+        ORDER BY month
+    """
+    
+    results = self.db.execute_query(query, (str(year),))
+    return [dict(row) for row in results] if results else []
