@@ -5,10 +5,12 @@ Punto de entrada principal para la aplicación PapaSoft
 import sys
 import os
 
-# Agregar el directorio actual al path de Python
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Agregar las rutas de los módulos al path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'auth'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'ui'))
 
-# Ahora podemos importar nuestros módulos
 from ui.main_window import MainWindow
 from auth.auth_manager import AuthManager
 from database.database import Database
