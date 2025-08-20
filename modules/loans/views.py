@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 
 from modules.loans.controller import LoansController
 
-
 class LoansView:
     def __init__(self, parent, database, auth_manager):
         self.parent = parent
@@ -147,26 +146,6 @@ class LoansView:
         # Configurar pesos de grid
         form_frame.columnconfigure(1, weight=1)
         filter_frame.columnconfigure(1, weight=1)
-        
-        # Crear notebook para dividir entre tabla y gráficos
-        tab_control = ttk.Notebook(right_frame)
-        tab_control.pack(fill=tk.BOTH, expand=True)
-
-        # Pestaña de tabla
-        table_frame = ttk.Frame(tab_control)
-        tab_control.add(table_frame, text="Movimientos")
-
-        # Pestaña de gráficos
-        chart_frame = ttk.Frame(tab_control)
-        tab_control.add(chart_frame, text="Gráficos")
-
-        # Mover el treeview a la pestaña de tabla
-        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        # ... (configuración del treeview)
-
-        # Agregar controles para gráficos en chart_frame
-        ttk.Button(chart_frame, text="Generar Gráfico Mensual", 
-                command=self.show_monthly_chart).pack(pady=10)
         
         # Bind eventos
         self.loans_tree.bind('<Double-1>', self.on_loan_double_click)

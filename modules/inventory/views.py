@@ -598,3 +598,77 @@ class InventoryView:
         
         # Generar análisis inicial
         generate_analysis()
+        
+    def show_monthly_chart(self):
+        """Mostrar gráfico mensual de transacciones"""
+        try:
+            # Obtener datos mensuales
+            monthly_data = self.controller.get_monthly_summary()
+            
+            if not monthly_data:
+                messagebox.showinfo("Información", "No hay datos disponibles para generar el gráfico")
+                return
+            
+            # Crear ventana para el gráfico
+            chart_window = tk.Toplevel(self.parent)
+            chart_window.title("Gráfico Mensual")
+            chart_window.geometry("800x600")
+            
+            # Frame para el gráfico
+            chart_frame = ttk.Frame(chart_window)
+            chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Importar matplotlib para crear el gráfico
+            try:
+                import matplotlib.pyplot as plt
+                from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+                from matplotlib.dates import DateFormatter
+                
+                # Crear figura
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+                
+                # Preparar datos
+                months = [item['month'] for item in monthly_data]
+                incomes = [item['total_income'] for item in monthly_data]
+                expenses = [item['total_expense'] for item in monthly_data]
+                
+                # Gráfico de barras
+                x = range(len(months))
+                width = 0.35
+                
+                ax1.bar([i - width/2 for i in x], incomes, width, label='Ingresos', color='green', alpha=0.7)
+                ax1.bar([i + width/2 for i in x], expenses, width, label='Egresos', color='red', alpha=0.7)
+                
+                ax1.set_xlabel('Mes')
+                ax1.set_ylabel('Monto ($)')
+                ax1.set_title('Ingresos vs Egresos por Mes')
+                ax1.set_xticks(x)
+                ax1.set_xticklabels(months, rotation=45)
+                ax1.legend()
+                ax1.grid(True, alpha=0.3)
+                
+                # Gráfico de línea para balance
+                balances = [inc - exp for inc, exp in zip(incomes, expenses)]
+                ax2.plot(months, balances, marker='o', linewidth=2, markersize=6, color='blue')
+                ax2.set_xlabel('Mes')
+                ax2.set_ylabel('Balance ($)')
+                ax2.set_title('Balance Mensual')
+                ax2.grid(True, alpha=0.3)
+                ax2.tick_params(axis='x', rotation=45)
+                
+                # Ajustar layout
+                plt.tight_layout()
+                
+                # Agregar al frame de tkinter
+                canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+                
+                # Botón de cerrar
+                ttk.Button(chart_frame, text="Cerrar", command=chart_window.destroy).pack(pady=10)
+                
+            except ImportError:
+                messagebox.showerror("Error", "Para ver los gráficos necesita instalar matplotlib:\npip install matplotlib")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar el gráfico: {str(e)}")
