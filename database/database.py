@@ -3,18 +3,21 @@ Módulo para la gestión de la base de datos SQLite
 """
 import sqlite3
 import os
+import threading
 from datetime import datetime
 
 class Database:
     def __init__(self, db_name="papasoft.db"):
         self.db_name = db_name
         self.connection = None
+        self._lock = threading.Lock()  # <-- para acceso concurrente seguro
         self.init_db()
         
     def connect(self):
         """Establecer conexión con la base de datos"""
         if self.connection is None:
-            self.connection = sqlite3.connect(self.db_name)
+            # permitir uso desde hilos distintos
+            self.connection = sqlite3.connect(self.db_name, check_same_thread=False)
             self.connection.row_factory = sqlite3.Row
         return self.connection
     
@@ -108,28 +111,43 @@ class Database:
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-        
+
+        # Stock de costales (empaque) - tabla única con id=1
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS packaging_stock (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                sacks_count INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute("SELECT COUNT(*) AS c FROM packaging_stock WHERE id = 1")
+        row = cursor.fetchone()
+        if not row or row["c"] == 0:
+            cursor.execute(
+                "INSERT INTO packaging_stock (id, sacks_count, updated_at) VALUES (1, 0, CURRENT_TIMESTAMP)"
+            )
+
         conn.commit()
         
     def execute_query(self, query, params=None):
-        """Ejecutar una consulta y retornar resultados"""
-        conn = self.connect()
-        cursor = conn.cursor()
-        
-        try:
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-                
-            if query.strip().upper().startswith('SELECT'):
-                return cursor.fetchall()
-            else:
-                conn.commit()
-                return cursor.lastrowid
-        except sqlite3.Error as e:
-            conn.rollback()
-            raise e
+        """Ejecutar una consulta y retornar resultados (thread-safe)"""
+        with self._lock:
+            conn = self.connect()
+            cursor = conn.cursor()
+            try:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                    
+                if query.strip().upper().startswith('SELECT'):
+                    return cursor.fetchall()
+                else:
+                    conn.commit()
+                    return cursor.lastrowid
+            except sqlite3.Error as e:
+                conn.rollback()
+                raise e
             
     def get_cursor(self):
         """Obtener un cursor para operaciones más complejas"""

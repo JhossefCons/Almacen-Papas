@@ -1,5 +1,5 @@
 """
-Ventana principal de la aplicación - Versión Final
+Ventana principal de la aplicación - Versión con módulo de Ventas y responsabilidades separadas
 """
 import tkinter as tk
 from tkinter import ttk
@@ -112,6 +112,8 @@ class MainWindow:
                   command=lambda: self.help_system.show_help('prestamos')).pack(side=tk.LEFT, padx=2, pady=2)
         ttk.Button(toolbar, text="Ayuda Inventario", 
                   command=lambda: self.help_system.show_help('inventario')).pack(side=tk.LEFT, padx=2, pady=2)
+        ttk.Button(toolbar, text="Ayuda Ventas", 
+                  command=lambda: self.help_system.show_help('ventas')).pack(side=tk.LEFT, padx=2, pady=2)
     
     def setup_notebook(self):
         """Configurar el notebook con pestañas para cada módulo"""
@@ -123,25 +125,37 @@ class MainWindow:
             from modules.cash_register.views import CashRegisterView
             from modules.loans.views import LoansView
             from modules.inventory.views import InventoryView
+            # NUEVO: ventas
+            from modules.sales.views import SalesView
+            # Controlador de caja para pasar a ventas
+            from modules.cash_register.controller import CashRegisterController
+
+            # Instancia compartida de controlador de caja para ventas
+            self.cash_controller = CashRegisterController(self.db, self.auth_manager)
+            
+            # Crear pestaña para módulo de ventas (salidas + impacto en caja e inventario)
+            sales_frame = ttk.Frame(self.notebook)
+            self.notebook.add(sales_frame, text="Ventas")
+            self.sales_view = SalesView(sales_frame, self.db, self.auth_manager, self.cash_controller)
             
             # Crear pestaña para módulo de caja
             cash_frame = ttk.Frame(self.notebook)
             self.notebook.add(cash_frame, text="Módulo de Caja")
             self.cash_view = CashRegisterView(cash_frame, self.db, self.auth_manager)
             
+            # Crear pestaña para módulo de inventario (solo existencias)
+            inventory_frame = ttk.Frame(self.notebook)
+            self.notebook.add(inventory_frame, text="Inventario de Papa")
+            self.inventory_view = InventoryView(inventory_frame, self.db, self.auth_manager)
+            
             # Crear pestaña para módulo de préstamos
             loans_frame = ttk.Frame(self.notebook)
             self.notebook.add(loans_frame, text="Préstamos a Empleados")
             self.loans_view = LoansView(loans_frame, self.db, self.auth_manager)
             
-            # Crear pestaña para módulo de inventario
-            inventory_frame = ttk.Frame(self.notebook)
-            self.notebook.add(inventory_frame, text="Inventario de Papa")
-            self.inventory_view = InventoryView(inventory_frame, self.db, self.auth_manager)
-            
         except ImportError as e:
             # Placeholder en caso de error
-            for tab_name in ["Módulo de Caja", "Préstamos a Empleados", "Inventario de Papa"]:
+            for tab_name in ["Módulo de Caja", "Préstamos a Empleados", "Inventario de Papa", "Ventas"]:
                 frame = ttk.Frame(self.notebook)
                 self.notebook.add(frame, text=tab_name)
                 label = ttk.Label(frame, text=f"{tab_name} - Error al cargar: {str(e)}")
@@ -153,7 +167,10 @@ class MainWindow:
         status_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
         user_info = self.auth_manager.get_current_user_info()
-        user_text = f"Usuario: {user_info['username']} ({user_info['role']})"
+        if user_info:
+            user_text = f"Usuario: {user_info['username']} ({user_info['role']})"
+        else:
+            user_text = "Usuario: -"
         
         self.status_user = ttk.Label(status_frame, text=user_text)
         self.status_user.pack(side=tk.LEFT, padx=10)
@@ -190,14 +207,37 @@ class MainWindow:
         self.root.after(30000, self.update_notification_count)  # Actualizar cada 30 segundos
     
     def refresh_all(self):
-        """Actualizar todos los módulos"""
+        """Actualizar todos los módulos (sin romper compatibilidad con distintas vistas)"""
         try:
+            # Caja
             if hasattr(self, 'cash_view'):
-                self.cash_view.load_transactions()
+                if hasattr(self.cash_view, 'load_transactions'):
+                    self.cash_view.load_transactions()
+                elif hasattr(self.cash_view, 'refresh'):
+                    self.cash_view.refresh()
+            
+            # Préstamos
             if hasattr(self, 'loans_view'):
-                self.loans_view.load_loans()
+                if hasattr(self.loans_view, 'load_loans'):
+                    self.loans_view.load_loans()
+                elif hasattr(self.loans_view, 'refresh'):
+                    self.loans_view.refresh()
+            
+            # Inventario (nueva vista usa refresh_table)
             if hasattr(self, 'inventory_view'):
-                self.inventory_view.load_inventory()
+                if hasattr(self.inventory_view, 'refresh_table'):
+                    self.inventory_view.refresh_table()
+                elif hasattr(self.inventory_view, 'load_inventory'):
+                    self.inventory_view.load_inventory()
+                elif hasattr(self.inventory_view, 'refresh'):
+                    self.inventory_view.refresh()
+            
+            # Ventas (refrescar stocks y precio sugerido)
+            if hasattr(self, 'sales_view'):
+                if hasattr(self.sales_view, '_refresh_stock_labels'):
+                    self.sales_view._refresh_stock_labels()
+                if hasattr(self.sales_view, '_auto_fill_price'):
+                    self.sales_view._auto_fill_price()
             
             messagebox.showinfo("Actualizado", "Todos los módulos han sido actualizados")
         except Exception as e:
@@ -209,7 +249,6 @@ class MainWindow:
     
     def show_preferences(self):
         """Mostrar diálogo de preferencias"""
-        # Implementación básica de preferencias
         dialog = tk.Toplevel(self.root)
         dialog.title("Preferencias - PapaSoft")
         dialog.geometry("400x300")
@@ -244,6 +283,7 @@ class MainWindow:
         • Gestión de Caja
         • Control de Préstamos
         • Inventario de Papa
+        • Ventas
         • Reportes y Gráficos
         • Sistema de Notificaciones
         
