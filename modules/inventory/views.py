@@ -3,9 +3,11 @@
 Inventario de Papas (stock + entradas)
 - Formulario de ENTRADAS con Precio de compra (costo) + Precio de venta (referencia).
 - Si se registra en Caja, usa el precio de compra.
-- Tabla superior: STOCK actual (incluye 0) con Precio ref.
-- Tabla inferior: VALORIZACIÓN del inventario (costo promedio, valor a costo, valor potencial, margen).
-- Edición admin: ajustar precio ref. y stock total (como antes).
+- Tabla superior: STOCK actual (incluye 0) con Precio ref. (con scroll vertical y horizontal).
+- Tabla inferior: VALORIZACIÓN simplificada (Tipo, Calidad, Bultos, Costo compra, Precio venta, Ganancias)
+  con scroll vertical y horizontal.
+- Edición admin: ajustar precio ref. y stock total (doble clic o botón "Editar seleccionado").
+- Método refresh_all() para actualizar al abrir la pestaña.
 """
 
 import tkinter as tk
@@ -35,10 +37,7 @@ class InventoryView:
         self.is_admin = self.auth.has_permission("admin")
 
         self._build_ui()
-        self.refresh_stock_table()
-        self.refresh_valuation_table()
-        self.refresh_sacks_label()
-        self._auto_fill_prices()  # inicial
+        self.refresh_all()
 
     # ------------------------------
     # UI
@@ -50,7 +49,7 @@ class InventoryView:
         left = ttk.LabelFrame(container, text="Entrada de inventario", padding=(8, 8, 8, 8))
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        right = ttk.LabelFrame(container, text="Stock actual y valorización", padding=(8, 8, 8, 8))
+        right = ttk.LabelFrame(container, text="Stock y valorización", padding=(8, 8, 8, 8))
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         row = 0
@@ -157,7 +156,7 @@ class InventoryView:
         for c in range(5):
             lf_sacks.grid_columnconfigure(c, weight=1)
 
-        # ----------------- Panel derecho: 2 tablas -----------------
+        # ----------------- Panel derecho: 2 tablas con scroll -----------------
         style = ttk.Style()
         style.configure("Inv.Treeview", rowheight=22)
         style.configure("Inv.Treeview.Heading", font=("Segoe UI", 9, "bold"))
@@ -165,13 +164,25 @@ class InventoryView:
         # STOCK
         stock_frame = ttk.LabelFrame(right, text="Stock actual")
         stock_frame.pack(fill=tk.BOTH, expand=True)
+
         cols = ("potato_type", "quality", "price", "stock")
         self.stock_tree = ttk.Treeview(stock_frame, columns=cols, show="headings", height=12, style="Inv.Treeview")
-        self.stock_tree.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollbars stock
+        stock_y = ttk.Scrollbar(stock_frame, orient="vertical", command=self.stock_tree.yview)
+        stock_x = ttk.Scrollbar(stock_frame, orient="horizontal", command=self.stock_tree.xview)
+        self.stock_tree.configure(yscrollcommand=stock_y.set, xscrollcommand=stock_x.set)
+
+        self.stock_tree.grid(row=0, column=0, sticky="nsew")
+        stock_y.grid(row=0, column=1, sticky="ns")
+        stock_x.grid(row=1, column=0, sticky="ew")
+
+        stock_frame.grid_rowconfigure(0, weight=1)
+        stock_frame.grid_columnconfigure(0, weight=1)
 
         self.stock_tree.heading("potato_type", text="Tipo")
         self.stock_tree.heading("quality", text="Calidad")
-        self.stock_tree.heading("price", text="Precio venta.")
+        self.stock_tree.heading("price", text="Precio ref.")
         self.stock_tree.heading("stock", text="Bultos disponibles")
 
         self.stock_tree.column("potato_type", width=160, anchor=tk.W)
@@ -184,47 +195,60 @@ class InventoryView:
         self.stock_tree.bind("<Double-1>", self._on_stock_dblclick)
 
         actions = ttk.Frame(stock_frame)
-        actions.pack(fill=tk.X, pady=(6, 0))
+        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.edit_btn = ttk.Button(actions, text="Editar seleccionado (admin)",
                                    command=self._edit_selected,
                                    state=("normal" if self.is_admin else "disabled"))
         self.edit_btn.pack(side=tk.LEFT)
 
+        # *** IMPORTANTE: usar grid (NO pack) en el mismo contenedor que ya usa grid ***
         self.total_label = ttk.Label(stock_frame, text="Total de bultos: 0", font=("Segoe UI", 9, "bold"))
-        self.total_label.pack(anchor=tk.E, pady=(6, 0))
+        self.total_label.grid(row=3, column=0, columnspan=2, sticky="e", pady=(6, 0))
 
-        # VALORIZACIÓN
-        val_frame = ttk.LabelFrame(right, text="Valorización del inventario")
+        # VALORIZACIÓN simplificada
+        val_frame = ttk.LabelFrame(right, text="Valorización del inventario (simplificada)")
         val_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
-        vcols = ("potato_type", "quality", "stock", "avg_cost", "cost_value", "ref_price",
-                 "potential_revenue")
+        vcols = ("potato_type", "quality", "stock", "avg_cost", "ref_price", "gain_total")
         self.valuation_tree = ttk.Treeview(val_frame, columns=vcols, show="headings", height=10, style="Inv.Treeview")
-        self.valuation_tree.pack(fill=tk.BOTH, expand=True)
+
+        # Scrollbars valorización
+        val_y = ttk.Scrollbar(val_frame, orient="vertical", command=self.valuation_tree.yview)
+        val_x = ttk.Scrollbar(val_frame, orient="horizontal", command=self.valuation_tree.xview)
+        self.valuation_tree.configure(yscrollcommand=val_y.set, xscrollcommand=val_x.set)
+
+        self.valuation_tree.grid(row=0, column=0, sticky="nsew")
+        val_y.grid(row=0, column=1, sticky="ns")
+        val_x.grid(row=1, column=0, sticky="ew")
+
+        val_frame.grid_rowconfigure(0, weight=1)
+        val_frame.grid_columnconfigure(0, weight=1)
 
         headers = {
             "potato_type": "Tipo",
             "quality": "Calidad",
             "stock": "Bultos",
             "avg_cost": "Costo compra",
-            "cost_value": "Costo total",
             "ref_price": "Precio venta",
-            "potential_revenue": "Valor potencial"
+            "gain_total": "Ganancias Totales"
         }
-        widths = {
-            "potato_type": 90, "quality": 90, "stock": 70, "avg_cost": 100, "cost_value": 120,
-            "ref_price": 90, "potential_revenue": 120
-        }
+        widths = {"potato_type": 120, "quality": 120, "stock": 80,
+                  "avg_cost": 110, "ref_price": 110, "gain_total": 120}
         for c in vcols:
             self.valuation_tree.heading(c, text=headers[c])
-            self.valuation_tree.column(c, width=widths[c],
-                                       anchor=tk.W if c in ("potato_type", "quality") else (tk.CENTER if c=="stock" else tk.E))
+            self.valuation_tree.column(
+                c,
+                width=widths[c],
+                anchor=(tk.CENTER if c == "stock" else tk.E) if c not in ("potato_type", "quality") else tk.W
+            )
 
         self.valuation_tree.tag_configure("odd", background="#f7f7f7")
 
-        ttk.Label(right,
-                  text="Nota: las ventas se registran en la pestaña 'Ventas' y actualizan este stock automáticamente.",
-                  foreground="gray").pack(anchor=tk.W, padx=2, pady=(6, 2))
+        ttk.Label(
+            right,
+            text="Nota: las ventas se registran en la pestaña 'Ventas' y actualizan este stock automáticamente.",
+            foreground="gray"
+        ).pack(anchor=tk.W, padx=2, pady=(6, 2))
 
     # ------------------------------
     # Helpers
@@ -238,7 +262,7 @@ class InventoryView:
         self._auto_fill_prices()
 
     def _auto_fill_prices(self):
-        """Autollenado de precios: compra (último costo) y venta (precio ref.)."""
+        """Autollenado: compra (último costo) y venta (precio ref.)."""
         t = self.type_cb.get().strip().lower()
         q = self.quality_cb.get().strip().lower()
         # compra
@@ -251,6 +275,15 @@ class InventoryView:
         self.sale_price_entry.delete(0, tk.END)
         if p_sell is not None:
             self.sale_price_entry.insert(0, f"{p_sell:.2f}")
+
+    # ------------------------------
+    # Públicos para refrescar desde fuera
+    # ------------------------------
+    def refresh_all(self):
+        self.refresh_stock_table()
+        self.refresh_valuation_table()
+        self.refresh_sacks_label()
+        self._auto_fill_prices()
 
     # ------------------------------
     # Costales
@@ -302,16 +335,16 @@ class InventoryView:
     def set_sacks_click(self):
         if not self.is_admin:
             messagebox.showerror("Permiso denegado", "Solo el administrador puede ajustar costales.")
-            return
-        try:
-            new_count = int(self.sacks_set_entry.get())
-            self.controller.set_sacks(new_count)
-            self.refresh_sacks_label()
-            messagebox.showinfo("Costales", "Stock de costales ajustado.")
-        except ValueError:
-            messagebox.showerror("Error", "Ingrese un número entero válido.")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        else:
+            try:
+                new_count = int(self.sacks_set_entry.get())
+                self.controller.set_sacks(new_count)
+                self.refresh_sacks_label()
+                messagebox.showinfo("Costales", "Stock de costales ajustado.")
+            except ValueError:
+                messagebox.showerror("Error", "Ingrese un número entero válido.")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
 
     # ------------------------------
     # Entradas & tablas
@@ -352,7 +385,7 @@ class InventoryView:
                 date, t, q, "entry", qty, p_buy, supplier, notes
             )
 
-            # Actualizar precio de venta de referencia
+            # Actualizar precio de venta de referencia (solo admin)
             if self.is_admin:
                 self.controller.set_reference_price(t, q, p_sell)
 
@@ -364,8 +397,7 @@ class InventoryView:
                 self.cash.add_transaction(date, "expense", desc, total, pay, "compra_inventario")
 
             messagebox.showinfo("Inventario", "Entrada registrada correctamente.")
-            self.refresh_stock_table()
-            self.refresh_valuation_table()
+            self.refresh_all()
             self._reset_form()
         except ValueError as ve:
             messagebox.showerror("Error", str(ve))
@@ -387,28 +419,39 @@ class InventoryView:
                 tags.append("zero")
             if idx % 2 == 1:
                 tags.append("odd")
-            self.stock_tree.insert("", tk.END,
-                                   values=(r.get("potato_type"), r.get("quality"), f"{price:.2f}", stock),
-                                   tags=tuple(tags))
+            self.stock_tree.insert(
+                "", tk.END,
+                values=(r.get("potato_type"), r.get("quality"), f"{price:.2f}", stock),
+                tags=tuple(tags)
+            )
         self.total_label.config(text=f"Total de bultos: {total}")
 
     def refresh_valuation_table(self):
         for item in self.valuation_tree.get_children():
             self.valuation_tree.delete(item)
 
-        rows = self.controller.get_inventory_valuation()
-        for idx, r in enumerate(rows):
-            avg_cost = r["avg_cost"]
-            ref_price = r["ref_price"]
+        # Usamos get_inventory_valuation() del controlador y derivamos las columnas simplificadas
+        data = self.controller.get_inventory_valuation()
+        for idx, r in enumerate(data):
+            stock = int(r["stock"])
+            avg_cost = r["avg_cost"]  # puede ser None
+            ref_price = r["ref_price"]  # puede ser None
+
+            if avg_cost is None or ref_price is None:
+                gain_text = "-"
+            else:
+                gain_total = stock * (ref_price - avg_cost-1000)
+                gain_text = f"{gain_total:.2f}"
+
             self.valuation_tree.insert(
                 "", tk.END,
                 values=(
-                    r["potato_type"], r["quality"], r["stock"],
+                    r["potato_type"],
+                    r["quality"],
+                    stock,
                     "-" if avg_cost is None else f"{avg_cost:.2f}",
-                    f"{float(r['cost_value']):.2f}",
                     "-" if ref_price is None else f"{ref_price:.2f}",
-                    f"{float(r['potential_revenue']):.2f}",
-                    f"{float(r['potential_margin']):.2f}"
+                    gain_text
                 ),
                 tags=("odd",) if idx % 2 else ()
             )
@@ -477,8 +520,7 @@ class InventoryView:
                     self.controller.set_stock_by_admin(potato_type, quality, new_stock, note_var.get().strip())
 
                 dlg.destroy()
-                self.refresh_stock_table()
-                self.refresh_valuation_table()
+                self.refresh_all()
                 messagebox.showinfo("Inventario", "Cambios guardados.")
             except ValueError as ve:
                 messagebox.showerror("Error", str(ve))

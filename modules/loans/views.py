@@ -1,6 +1,14 @@
+# modules/loans/views.py
 """
 Vista para el módulo de préstamos a empleados
+Novedades:
+- Gestión de empleados (crear y seleccionar en préstamos)
+- Préstamo: método de pago + "Registrar en Caja"
+- Pago préstamo: método de pago + "Registrar en Caja"
+- Pago de salario con deducción automática y registro en Caja
+- Reporte con totales
 """
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -8,644 +16,566 @@ from datetime import datetime, timedelta
 
 from modules.loans.controller import LoansController
 
+PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
+
+
 class LoansView:
     def __init__(self, parent, database, auth_manager):
         self.parent = parent
         self.db = database
         self.auth_manager = auth_manager
         self.controller = LoansController(database, auth_manager)
-        
+
         self.setup_ui()
+        self.load_employees()
         self.load_loans()
-    
+
+    # -----------------------------
+    # UI
+    # -----------------------------
     def setup_ui(self):
-        """Configurar la interfaz de usuario del módulo de préstamos"""
-        # Frame principal con paneles divididos
         main_paned = ttk.PanedWindow(self.parent, orient=tk.HORIZONTAL)
         main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Panel izquierdo para formulario y filtros
-        left_frame = ttk.Frame(main_paned, padding=10)
-        main_paned.add(left_frame, weight=1)
-        
-        # Panel derecho para la lista de préstamos
-        right_frame = ttk.Frame(main_paned, padding=10)
-        main_paned.add(right_frame, weight=2)
-        
-        # Formulario para nuevo préstamo
-        form_frame = ttk.LabelFrame(left_frame, text="Nuevo Préstamo", padding=10)
-        form_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(form_frame, text="Empleado:").grid(row=0, column=0, sticky=tk.W, pady=2)
-        self.employee_entry = ttk.Entry(form_frame)
-        self.employee_entry.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(form_frame, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=2)
-        self.amount_entry = ttk.Entry(form_frame)
+
+        left = ttk.Frame(main_paned, padding=10)
+        main_paned.add(left, weight=1)
+
+        right = ttk.Frame(main_paned, padding=10)
+        main_paned.add(right, weight=2)
+
+        # --- EMPLEADOS ---
+        emp_frame = ttk.LabelFrame(left, text="Empleado", padding=10)
+        emp_frame.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(emp_frame, text="Nombre:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.emp_first = ttk.Entry(emp_frame)
+        self.emp_first.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Label(emp_frame, text="Apellido:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.emp_last = ttk.Entry(emp_frame)
+        self.emp_last.grid(row=1, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Label(emp_frame, text="Salario:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.emp_salary = ttk.Entry(emp_frame)
+        self.emp_salary.grid(row=2, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Button(emp_frame, text="Crear empleado", command=self.create_employee).grid(row=3, column=0, columnspan=2, pady=6)
+
+        emp_frame.columnconfigure(1, weight=1)
+
+        # --- NUEVO PRÉSTAMO ---
+        loan_frame = ttk.LabelFrame(left, text="Nuevo Préstamo", padding=10)
+        loan_frame.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(loan_frame, text="Empleado:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.employee_cb = ttk.Combobox(loan_frame, state="readonly", width=28)
+        self.employee_cb.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Label(loan_frame, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.amount_entry = ttk.Entry(loan_frame)
         self.amount_entry.grid(row=1, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(form_frame, text="Fecha Préstamo:").grid(row=2, column=0, sticky=tk.W, pady=2)
-        self.date_issued_entry = DateEntry(form_frame, date_pattern='yyyy-mm-dd')
+
+        ttk.Label(loan_frame, text="Fecha préstamo:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.date_issued_entry = DateEntry(loan_frame, date_pattern='yyyy-mm-dd')
         self.date_issued_entry.set_date(datetime.now())
         self.date_issued_entry.grid(row=2, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(form_frame, text="Fecha Vencimiento:").grid(row=3, column=0, sticky=tk.W, pady=2)
-        self.due_date_entry = DateEntry(form_frame, date_pattern='yyyy-mm-dd')
+
+        ttk.Label(loan_frame, text="Vence:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.due_date_entry = DateEntry(loan_frame, date_pattern='yyyy-mm-dd')
         self.due_date_entry.set_date(datetime.now() + timedelta(days=30))
         self.due_date_entry.grid(row=3, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(form_frame, text="Tasa Interés (%):").grid(row=4, column=0, sticky=tk.W, pady=2)
-        self.interest_entry = ttk.Entry(form_frame)
+
+        ttk.Label(loan_frame, text="Interés (%):").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.interest_entry = ttk.Entry(loan_frame)
         self.interest_entry.insert(0, "0")
         self.interest_entry.grid(row=4, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(form_frame, text="Notas:").grid(row=5, column=0, sticky=tk.W, pady=2)
-        self.notes_entry = ttk.Entry(form_frame)
+
+        ttk.Label(loan_frame, text="Notas:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.notes_entry = ttk.Entry(loan_frame)
         self.notes_entry.grid(row=5, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        button_frame = ttk.Frame(form_frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=10)
-        
-        ttk.Button(button_frame, text="Agregar", command=self.add_loan).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Limpiar", command=self.clear_form).pack(side=tk.LEFT, padx=5)
-        
-        # Filtros
-        filter_frame = ttk.LabelFrame(left_frame, text="Filtros", padding=10)
-        filter_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(filter_frame, text="Estado:").grid(row=0, column=0, sticky=tk.W, pady=2)
-        self.status_filter = ttk.Combobox(filter_frame, state="readonly", width=18)
-        self.status_filter['values'] = ('', 'active', 'paid', 'overdue')
-        self.status_filter.set('')
-        self.status_filter.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Label(filter_frame, text="Empleado:").grid(row=1, column=0, sticky=tk.W, pady=2)
-        self.employee_filter = ttk.Entry(filter_frame)
-        self.employee_filter.grid(row=1, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        
-        ttk.Button(filter_frame, text="Aplicar Filtros", command=self.apply_filters).grid(row=2, column=0, columnspan=2, pady=10)
-        
-        # Alertas de vencimientos
-        alerts_frame = ttk.LabelFrame(left_frame, text="Alertas de Vencimiento", padding=10)
-        alerts_frame.pack(fill=tk.X)
-        
-        self.alerts_text = tk.Text(alerts_frame, height=6, width=30)
-        self.alerts_text.pack(fill=tk.BOTH, expand=True)
-        self.alerts_text.config(state=tk.DISABLED)
-        
-        ttk.Button(alerts_frame, text="Actualizar Alertas", command=self.update_alerts).pack(pady=5)
-        
-        # Lista de préstamos
-        list_frame = ttk.Frame(right_frame)
+
+        # caja en préstamo
+        self.loan_register_cash = tk.BooleanVar(value=True)
+        ttk.Checkbutton(loan_frame, text="Registrar en Caja", variable=self.loan_register_cash).grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+
+        ttk.Label(loan_frame, text="Método pago:").grid(row=7, column=0, sticky=tk.W, pady=2)
+        self.loan_pay_method = ttk.Combobox(loan_frame, state="readonly", values=tuple(PAY_TO_CODE.keys()), width=18)
+        self.loan_pay_method.set("Efectivo")
+        self.loan_pay_method.grid(row=7, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        btns = ttk.Frame(loan_frame)
+        btns.grid(row=8, column=0, columnspan=2, pady=8)
+        ttk.Button(btns, text="Agregar", command=self.add_loan,
+            state=("normal" if self.auth_manager.has_permission('admin') else "disabled")
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(btns, text="Limpiar", command=self.clear_loan_form).pack(side=tk.LEFT, padx=5)
+
+        loan_frame.columnconfigure(1, weight=1)
+
+        # --- NÓMINA ---
+        payroll = ttk.LabelFrame(left, text="Pago de salario (con deducción de préstamos)", padding=10)
+        payroll.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(payroll, text="Empleado:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.payroll_emp_cb = ttk.Combobox(payroll, state="readonly", width=28)
+        self.payroll_emp_cb.grid(row=0, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Label(payroll, text="Fecha pago:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.payroll_date = DateEntry(payroll, date_pattern='yyyy-mm-dd')
+        self.payroll_date.set_date(datetime.now())
+        self.payroll_date.grid(row=1, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        ttk.Label(payroll, text="Método:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.payroll_method = ttk.Combobox(payroll, state="readonly", values=tuple(PAY_TO_CODE.keys()), width=18)
+        self.payroll_method.set("Efectivo")
+        self.payroll_method.grid(row=2, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+
+        self.payroll_register_cash = tk.BooleanVar(value=True)
+        ttk.Checkbutton(payroll, text="Registrar en Caja", variable=self.payroll_register_cash).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+
+        ttk.Button(payroll, text="Pagar salario", command=self.pay_salary).grid(row=4, column=0, columnspan=2, pady=8)
+
+        payroll.columnconfigure(1, weight=1)
+
+        # ----------------- LISTA / ACCIONES -----------------
+        list_frame = ttk.Frame(right)
         list_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Treeview para mostrar préstamos
+
         columns = ('id', 'employee', 'amount', 'issued', 'due', 'interest', 'status', 'user')
         self.loans_tree = ttk.Treeview(list_frame, columns=columns, show='headings')
-        
-        # Definir columnas
-        self.loans_tree.heading('id', text='ID')
-        self.loans_tree.heading('employee', text='Empleado')
-        self.loans_tree.heading('amount', text='Monto')
-        self.loans_tree.heading('issued', text='Fecha Préstamo')
-        self.loans_tree.heading('due', text='Fecha Vencimiento')
-        self.loans_tree.heading('interest', text='Interés %')
-        self.loans_tree.heading('status', text='Estado')
-        self.loans_tree.heading('user', text='Usuario')
-        
-        # Ajustar anchos de columnas
-        self.loans_tree.column('id', width=40)
-        self.loans_tree.column('employee', width=100)
-        self.loans_tree.column('amount', width=80)
-        self.loans_tree.column('issued', width=90)
-        self.loans_tree.column('due', width=90)
-        self.loans_tree.column('interest', width=70)
-        self.loans_tree.column('status', width=80)
-        self.loans_tree.column('user', width=100)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.loans_tree.yview)
-        self.loans_tree.configure(yscrollcommand=scrollbar.set)
-        
+
+        for h, txt, w in (
+            ('id', 'ID', 40),
+            ('employee', 'Empleado', 180),
+            ('amount', 'Monto', 90),
+            ('issued', 'Fecha Préstamo', 100),
+            ('due', 'Fecha Vencimiento', 110),
+            ('interest', 'Interés %', 80),
+            ('status', 'Estado', 80),
+            ('user', 'Usuario', 100),
+        ):
+            self.loans_tree.heading(h, text=txt)
+            self.loans_tree.column(h, width=w, anchor=tk.W if h in ('employee',) else tk.CENTER)
+
+        ysb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.loans_tree.yview)
+        self.loans_tree.configure(yscrollcommand=ysb.set)
         self.loans_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Botones de acción para préstamos
-        action_frame = ttk.Frame(right_frame)
-        action_frame.pack(fill=tk.X, pady=(5, 0))
-        
+        ysb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        action = ttk.Frame(right)
+        action.pack(fill=tk.X, pady=(6, 0))
+
         if self.auth_manager.has_permission('admin'):
-            ttk.Button(action_frame, text="Editar", command=self.edit_loan).pack(side=tk.LEFT, padx=5)
-            ttk.Button(action_frame, text="Eliminar", command=self.delete_loan).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(action_frame, text="Ver Detalles", command=self.show_loan_details).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_frame, text="Registrar Pago", command=self.show_payment_dialog).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_frame, text="Actualizar", command=self.load_loans).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(action_frame, text="Reporte", command=self.show_report).pack(side=tk.RIGHT, padx=5)
-        
-        # Configurar pesos de grid
-        form_frame.columnconfigure(1, weight=1)
-        filter_frame.columnconfigure(1, weight=1)
-        
-        # Bind eventos
+            ttk.Button(action, text="Editar", command=self.edit_loan).pack(side=tk.LEFT, padx=5)
+            ttk.Button(action, text="Eliminar", command=self.delete_loan).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(action, text="Ver Detalles", command=self.show_loan_details).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action, text="Registrar Pago", command=self.show_payment_dialog,
+          state=("normal" if self.auth_manager.has_permission('admin') else "disabled")
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action, text="Actualizar", command=self.load_loans).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(action, text="Reporte", command=self.show_report).pack(side=tk.RIGHT, padx=5)
+
         self.loans_tree.bind('<Double-1>', self.on_loan_double_click)
-        
-        # Actualizar alertas
-        self.update_alerts()
-    
-    def load_loans(self):
-        """Cargar préstamos en el treeview"""
-        # Limpiar treeview
-        for item in self.loans_tree.get_children():
-            self.loans_tree.delete(item)
-        
-        # Obtener préstamos
-        loans = self.controller.get_loans()
-        
-        # Agregar préstamos al treeview
-        for loan in loans:
-            # Determinar color según estado
-            tags = ()
-            if loan['status'] == 'overdue':
-                tags = ('overdue',)
-            elif loan['status'] == 'paid':
-                tags = ('paid',)
-            
-            self.loans_tree.insert('', 'end', values=(
-                loan['id'],
-                loan['employee_name'],
-                f"${float(loan['amount']):.2f}",
-                loan['date_issued'],
-                loan['due_date'],
-                f"{float(loan['interest_rate']):.1f}%",
-                self._translate_status(loan['status']),
-                loan['username'] or ''
-            ), tags=tags)
-        
-        # Configurar colores para diferentes estados
-        self.loans_tree.tag_configure('overdue', background='#ffcccc')  # Rojo claro para vencidos
-        self.loans_tree.tag_configure('paid', background='#ccffcc')     # Verde claro para pagados
-    
-    def _translate_status(self, status):
-        """Traducir estados al español"""
-        translations = {
-            'active': 'Activo',
-            'paid': 'Pagado',
-            'overdue': 'Vencido'
-        }
-        return translations.get(status, status)
-    
-    def apply_filters(self):
-        """Aplicar filtros a los préstamos"""
-        status_filter = self.status_filter.get() or None
-        employee_filter = self.employee_filter.get() or None
-        
-        # Limpiar treeview
-        for item in self.loans_tree.get_children():
-            self.loans_tree.delete(item)
-        
-        # Obtener préstamos filtrados
-        loans = self.controller.get_loans(status_filter, employee_filter)
-        
-        # Agregar préstamos al treeview
-        for loan in loans:
-            tags = ()
-            if loan['status'] == 'overdue':
-                tags = ('overdue',)
-            elif loan['status'] == 'paid':
-                tags = ('paid',)
-            
-            self.loans_tree.insert('', 'end', values=(
-                loan['id'],
-                loan['employee_name'],
-                f"${float(loan['amount']):.2f}",
-                loan['date_issued'],
-                loan['due_date'],
-                f"{float(loan['interest_rate']):.1f}%",
-                self._translate_status(loan['status']),
-                loan['username'] or ''
-            ), tags=tags)
-    
-    def add_loan(self):
-        """Agregar un nuevo préstamo"""
+
+        # Filtros (sencillos)
+        filters = ttk.LabelFrame(right, text="Filtros", padding=8)
+        filters.pack(fill=tk.X, pady=(8, 0))
+
+        ttk.Label(filters, text="Estado:").pack(side=tk.LEFT)
+        self.status_filter = ttk.Combobox(filters, state="readonly", values=("", "active", "paid", "overdue"), width=12)
+        self.status_filter.set("")
+        self.status_filter.pack(side=tk.LEFT, padx=6)
+
+        ttk.Label(filters, text="Empleado:").pack(side=tk.LEFT)
+        self.employee_filter = ttk.Entry(filters, width=20)
+        self.employee_filter.pack(side=tk.LEFT, padx=6)
+
+        ttk.Button(filters, text="Aplicar", command=self.apply_filters).pack(side=tk.LEFT, padx=6)
+
+        # Alertas
+        alerts = ttk.LabelFrame(right, text="Alertas de Vencimiento", padding=8)
+        alerts.pack(fill=tk.BOTH, expand=False, pady=(8, 0))
+        self.alerts_text = tk.Text(alerts, height=6)
+        self.alerts_text.pack(fill=tk.BOTH, expand=True)
+        self.alerts_text.config(state=tk.DISABLED)
+
+        ttk.Button(alerts, text="Actualizar Alertas", command=self.update_alerts).pack(pady=4)
+
+    # -----------------------------
+    # EMPLEADOS
+    # -----------------------------
+    def load_employees(self):
+        self.employees = self.controller.list_employees()
+        names = [f"{e['id']} - {e['first_name']} {e['last_name']} (Sal: {e['salary']})" for e in self.employees]
+        self.employee_cb['values'] = names
+        self.payroll_emp_cb['values'] = [f"{e['id']} - {e['first_name']} {e['last_name']}" for e in self.employees]
+
+        if names:
+            self.employee_cb.set(names[0])
+            self.payroll_emp_cb.set(self.payroll_emp_cb['values'][0])
+
+    def create_employee(self):
         try:
-            employee = self.employee_entry.get()
-            amount = float(self.amount_entry.get())
-            date_issued = self.date_issued_entry.get_date().strftime('%Y-%m-%d')
-            due_date = self.due_date_entry.get_date().strftime('%Y-%m-%d')
-            interest_rate = float(self.interest_entry.get())
-            notes = self.notes_entry.get()
-            
-            if not employee:
-                messagebox.showerror("Error", "El nombre del empleado es obligatorio")
-                return
-            
-            if amount <= 0:
-                messagebox.showerror("Error", "El monto debe ser mayor a cero")
-                return
-            
-            if interest_rate < 0:
-                messagebox.showerror("Error", "La tasa de interés no puede ser negativa")
-                return
-            
-            # Verificar que la fecha de vencimiento sea posterior a la fecha de préstamo
-            if due_date <= date_issued:
-                messagebox.showerror("Error", "La fecha de vencimiento debe ser posterior a la fecha de préstamo")
-                return
-            
-            # Agregar préstamo
-            self.controller.add_loan(employee, amount, date_issued, due_date, interest_rate, notes)
-            
-            messagebox.showinfo("Éxito", "Préstamo agregado correctamente")
-            self.clear_form()
-            self.load_loans()
-            self.update_alerts()
-            
+            first = self.emp_first.get().strip()
+            last = self.emp_last.get().strip()
+            salary = float((self.emp_salary.get() or "0").strip())
+            emp_id = self.controller.add_employee(first, last, salary)
+            messagebox.showinfo("Empleado", "Empleado creado correctamente.")
+            self.emp_first.delete(0, tk.END)
+            self.emp_last.delete(0, tk.END)
+            self.emp_salary.delete(0, tk.END)
+            self.load_employees()
         except ValueError:
-            messagebox.showerror("Error", "Por favor ingrese valores numéricos válidos")
+            messagebox.showerror("Error", "Salario debe ser un número.")
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo agregar el préstamo: {str(e)}")
-    
-    def clear_form(self):
-        """Limpiar el formulario"""
-        self.employee_entry.delete(0, tk.END)
+            messagebox.showerror("Error", str(e))
+
+    def _get_selected_employee_id_from_combo(self, combo):
+        val = (combo.get() or "").strip()
+        if not val or " - " not in val:
+            return None
+        return int(val.split(" - ", 1)[0])
+
+    # -----------------------------
+    # PRÉSTAMOS
+    # -----------------------------
+    def load_loans(self, status_filter=None, employee_filter=None):
+        for i in self.loans_tree.get_children():
+            self.loans_tree.delete(i)
+        loans = self.controller.get_loans(status_filter, employee_filter)
+        for L in loans:
+            tags = ()
+            if L['status'] == 'overdue':
+                tags = ('overdue',)
+            elif L['status'] == 'paid':
+                tags = ('paid',)
+            self.loans_tree.insert('', 'end', values=(
+                L['id'],
+                L['employee_display'],
+                f"${float(L['amount']):.2f}",
+                L['date_issued'],
+                L['due_date'],
+                f"{float(L['interest_rate']):.1f}%",
+                self._translate_status(L['status']),
+                L.get('username') or ''
+            ), tags=tags)
+        self.loans_tree.tag_configure('overdue', background='#ffcccc')
+        self.loans_tree.tag_configure('paid', background='#ccffcc')
+
+    def _translate_status(self, status):
+        return {'active': 'Activo', 'paid': 'Pagado', 'overdue': 'Vencido'}.get(status, status)
+
+    def apply_filters(self):
+        st = self.status_filter.get() or None
+        emp = self.employee_filter.get() or None
+        self.load_loans(st, emp)
+
+    def clear_loan_form(self):
         self.amount_entry.delete(0, tk.END)
         self.date_issued_entry.set_date(datetime.now())
         self.due_date_entry.set_date(datetime.now() + timedelta(days=30))
-        self.interest_entry.delete(0, tk.END)
-        self.interest_entry.insert(0, "0")
+        self.interest_entry.delete(0, tk.END); self.interest_entry.insert(0, "0")
         self.notes_entry.delete(0, tk.END)
-    
-    def on_loan_double_click(self, event):
-        """Manejar doble clic en un préstamo"""
+        if self.employee_cb['values']:
+            self.employee_cb.set(self.employee_cb['values'][0])
+        self.loan_register_cash.set(True)
+        self.loan_pay_method.set("Efectivo")
+
+    def add_loan(self):
+        try:
+            emp_id = self._get_selected_employee_id_from_combo(self.employee_cb)
+            if not emp_id:
+                messagebox.showerror("Error", "Seleccione un empleado")
+                return
+            amount = float(self.amount_entry.get())
+            date_issued = self.date_issued_entry.get_date().strftime('%Y-%m-%d')
+            due_date = self.due_date_entry.get_date().strftime('%Y-%m-%d')
+            interest = float(self.interest_entry.get() or "0")
+            notes = self.notes_entry.get()
+            reg_cash = self.loan_register_cash.get()
+            pay_method = PAY_TO_CODE[self.loan_pay_method.get()]
+
+            self.controller.add_loan(emp_id, amount, date_issued, due_date, interest, notes,
+                                     register_in_cash=reg_cash, payment_method=pay_method)
+            messagebox.showinfo("Préstamo", "Préstamo agregado correctamente.")
+            self.clear_loan_form()
+            self.load_loans()
+            self.update_alerts()
+        except ValueError:
+            messagebox.showerror("Error", "Monto/Interés inválidos.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    # -----------------------------
+    # DETALLES / PAGOS
+    # -----------------------------
+    def on_loan_double_click(self, _):
         self.show_loan_details()
-    
+
     def show_loan_details(self):
-        """Mostrar detalles del préstamo seleccionado"""
-        selection = self.loans_tree.selection()
-        if not selection:
-            messagebox.showwarning("Advertencia", "Seleccione un préstamo para ver detalles")
+        sel = self.loans_tree.selection()
+        if not sel:
+            messagebox.showwarning("Advertencia", "Seleccione un préstamo")
             return
-        
-        item = self.loans_tree.item(selection[0])
-        loan_id = item['values'][0]
-        
-        # Obtener detalles del préstamo
-        loan_summary = self.controller.get_loan_summary(loan_id)
-        if not loan_summary:
-            messagebox.showerror("Error", "No se pudo obtener la información del préstamo")
+        loan_id = self.loans_tree.item(sel[0])['values'][0]
+        s = self.controller.get_loan_summary(loan_id)
+        if not s:
+            messagebox.showerror("Error", "No se pudo cargar el préstamo")
             return
-        
-        # Crear ventana de detalles
-        details_window = tk.Toplevel(self.parent)
-        details_window.title(f"Detalles del Préstamo - {loan_summary['loan']['employee_name']}")
-        details_window.geometry("600x400")
-        details_window.transient(self.parent)
-        details_window.grab_set()
-        
-        # Marco principal
-        main_frame = ttk.Frame(details_window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Información del préstamo
-        info_frame = ttk.LabelFrame(main_frame, text="Información del Préstamo", padding=10)
-        info_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        info_text = f"""
-Empleado: {loan_summary['loan']['employee_name']}
-Monto Original: ${float(loan_summary['loan']['amount']):.2f}
-Tasa de Interés: {float(loan_summary['loan']['interest_rate']):.1f}%
-Monto Total a Pagar: ${loan_summary['total_due']:.2f}
-Fecha de Préstamo: {loan_summary['loan']['date_issued']}
-Fecha de Vencimiento: {loan_summary['loan']['due_date']}
-Estado: {self._translate_status(loan_summary['loan']['status'])}
-Total Pagado: ${loan_summary['total_paid']:.2f}
-Saldo Pendiente: ${loan_summary['balance']:.2f}
-        """
-        
-        info_label = ttk.Label(info_frame, text=info_text, justify=tk.LEFT)
-        info_label.pack(anchor=tk.W)
-        
-        # Historial de pagos
-        payments_frame = ttk.LabelFrame(main_frame, text="Historial de Pagos", padding=10)
-        payments_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Treeview para pagos
-        columns = ('date', 'amount', 'notes', 'user')
-        payments_tree = ttk.Treeview(payments_frame, columns=columns, show='headings', height=8)
-        
-        payments_tree.heading('date', text='Fecha')
-        payments_tree.heading('amount', text='Monto')
-        payments_tree.heading('notes', text='Notas')
-        payments_tree.heading('user', text='Usuario')
-        
-        payments_tree.column('date', width=100)
-        payments_tree.column('amount', width=80)
-        payments_tree.column('notes', width=200)
-        payments_tree.column('user', width=100)
-        
-        # Agregar pagos al treeview
-        for payment in loan_summary['payments']:
-            payments_tree.insert('', 'end', values=(
-                payment['payment_date'],
-                f"${float(payment['amount']):.2f}",
-                payment['notes'] or '',
-                payment['username'] or ''
-            ))
-        
-        payments_tree.pack(fill=tk.BOTH, expand=True)
-    
+
+        win = tk.Toplevel(self.parent); win.title(f"Detalles - {s['loan']['employee_display']}"); win.geometry("620x420"); win.transient(self.parent); win.grab_set()
+        main = ttk.Frame(win, padding=10); main.pack(fill=tk.BOTH, expand=True)
+
+        info = ttk.LabelFrame(main, text="Información", padding=8); info.pack(fill=tk.X, pady=(0, 8))
+        text = (f"Empleado: {s['loan']['employee_display']}\n"
+                f"Monto original: ${float(s['loan']['amount']):.2f}\n"
+                f"Interés: {float(s['loan']['interest_rate']):.1f}%\n"
+                f"Total a pagar: ${float(s['total_due']):.2f}\n"
+                f"Fecha préstamo: {s['loan']['date_issued']} | Vence: {s['loan']['due_date']} | Estado: {self._translate_status(s['loan']['status'])}\n"
+                f"Pagado: ${float(s['total_paid']):.2f} | Saldo: ${float(s['balance']):.2f}")
+        ttk.Label(info, text=text, justify=tk.LEFT).pack(anchor=tk.W)
+
+        pays_frame = ttk.LabelFrame(main, text="Pagos", padding=8); pays_frame.pack(fill=tk.BOTH, expand=True)
+        cols = ('date', 'amount', 'notes', 'user')
+        tree = ttk.Treeview(pays_frame, columns=cols, show='headings', height=8)
+        for c, txt, w in (('date','Fecha',100), ('amount','Monto',90), ('notes','Notas',260), ('user','Usuario',120)):
+            tree.heading(c, text=txt); tree.column(c, width=w, anchor=tk.W if c=='notes' else tk.CENTER)
+        for p in s['payments']:
+            tree.insert('', 'end', values=(p['payment_date'], f"${float(p['amount']):.2f}", p['notes'] or '', p.get('username') or ''))
+        ysb = ttk.Scrollbar(pays_frame, orient=tk.VERTICAL, command=tree.yview); tree.configure(yscrollcommand=ysb.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True); ysb.pack(side=tk.RIGHT, fill=tk.Y)
+
     def show_payment_dialog(self):
-        """Mostrar diálogo para registrar un pago"""
-        selection = self.loans_tree.selection()
-        if not selection:
+        sel = self.loans_tree.selection()
+        if not sel:
             messagebox.showwarning("Advertencia", "Seleccione un préstamo para registrar pago")
             return
-        
-        item = self.loans_tree.item(selection[0])
-        loan_id = item['values'][0]
-        employee = item['values'][1]
-        
-        # Crear ventana de pago
-        payment_window = tk.Toplevel(self.parent)
-        payment_window.title(f"Registrar Pago - {employee}")
-        payment_window.geometry("400x250")
-        payment_window.transient(self.parent)
-        payment_window.grab_set()
-        
-        # Marco principal
-        main_frame = ttk.Frame(payment_window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(main_frame, text="Fecha Pago:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        payment_date = DateEntry(main_frame, date_pattern='yyyy-mm-dd')
-        payment_date.set_date(datetime.now())
-        payment_date.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        amount_entry = ttk.Entry(main_frame)
-        amount_entry.grid(row=1, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Notas:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        notes_entry = ttk.Entry(main_frame)
-        notes_entry.grid(row=2, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=15)
-        
-        def register_payment():
+        loan_id = self.loans_tree.item(sel[0])['values'][0]
+        employee = self.loans_tree.item(sel[0])['values'][1]
+
+        win = tk.Toplevel(self.parent); win.title(f"Registrar Pago - {employee}"); win.geometry("420x260"); win.transient(self.parent); win.grab_set()
+        main = ttk.Frame(win, padding=10); main.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main, text="Fecha Pago:").grid(row=0, column=0, sticky=tk.W, pady=4)
+        date_entry = DateEntry(main, date_pattern='yyyy-mm-dd'); date_entry.set_date(datetime.now())
+        date_entry.grid(row=0, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=4)
+        amount_entry = ttk.Entry(main); amount_entry.grid(row=1, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Notas:").grid(row=2, column=0, sticky=tk.W, pady=4)
+        notes_entry = ttk.Entry(main); notes_entry.grid(row=2, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        reg_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(main, text="Registrar en Caja", variable=reg_var).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+
+        ttk.Label(main, text="Método:").grid(row=4, column=0, sticky=tk.W, pady=4)
+        method_cb = ttk.Combobox(main, state="readonly", values=tuple(PAY_TO_CODE.keys()), width=18)
+        method_cb.set("Efectivo"); method_cb.grid(row=4, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        def do_register():
             try:
-                date = payment_date.get_date().strftime('%Y-%m-%d')
+                date = date_entry.get_date().strftime('%Y-%m-%d')
                 amount = float(amount_entry.get())
                 notes = notes_entry.get()
-                
-                if amount <= 0:
-                    messagebox.showerror("Error", "El monto debe ser mayor a cero")
-                    return
-                
-                self.controller.add_payment(loan_id, date, amount, notes)
-                messagebox.showinfo("Éxito", "Pago registrado correctamente")
-                payment_window.destroy()
+                reg = reg_var.get()
+                method = PAY_TO_CODE[method_cb.get()]
+                self.controller.add_payment(loan_id, date, amount, notes, register_in_cash=reg, payment_method=method)
+                messagebox.showinfo("Pago", "Pago registrado.")
+                win.destroy()
                 self.load_loans()
                 self.update_alerts()
-                
             except ValueError:
-                messagebox.showerror("Error", "Por favor ingrese un monto válido")
+                messagebox.showerror("Error", "Monto inválido")
             except Exception as e:
-                messagebox.showerror("Error", f"No se pudo registrar el pago: {str(e)}")
-        
-        ttk.Button(button_frame, text="Registrar", command=register_payment).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancelar", command=payment_window.destroy).pack(side=tk.LEFT, padx=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-    
-    def edit_loan(self):
-        """Editar préstamo seleccionado"""
-        selection = self.loans_tree.selection()
-        if not selection:
-            messagebox.showwarning("Advertencia", "Seleccione un préstamo para editar")
-            return
-        
-        item = self.loans_tree.item(selection[0])
-        loan_id = item['values'][0]
-        
-        # Obtener información del préstamo
-        loan = self.controller.get_loan_by_id(loan_id)
-        if not loan:
-            messagebox.showerror("Error", "No se pudo obtener la información del préstamo")
-            return
-        
-        # Crear ventana de edición
-        edit_window = tk.Toplevel(self.parent)
-        edit_window.title("Editar Préstamo")
-        edit_window.geometry("400x300")
-        edit_window.transient(self.parent)
-        edit_window.grab_set()
-        
-        # Marco principal
-        main_frame = ttk.Frame(edit_window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(main_frame, text="Empleado:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        employee_entry = ttk.Entry(main_frame)
-        employee_entry.insert(0, loan['employee_name'])
-        employee_entry.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        amount_entry = ttk.Entry(main_frame)
-        amount_entry.insert(0, str(loan['amount']))
-        amount_entry.grid(row=1, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Fecha Préstamo:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        date_issued = DateEntry(main_frame, date_pattern='yyyy-mm-dd')
-        date_issued.set_date(datetime.strptime(loan['date_issued'], '%Y-%m-%d'))
-        date_issued.grid(row=2, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Fecha Vencimiento:").grid(row=3, column=0, sticky=tk.W, pady=5)
-        due_date = DateEntry(main_frame, date_pattern='yyyy-mm-dd')
-        due_date.set_date(datetime.strptime(loan['due_date'], '%Y-%m-%d'))
-        due_date.grid(row=3, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Tasa Interés (%):").grid(row=4, column=0, sticky=tk.W, pady=5)
-        interest_entry = ttk.Entry(main_frame)
-        interest_entry.insert(0, str(loan['interest_rate']))
-        interest_entry.grid(row=4, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Notas:").grid(row=5, column=0, sticky=tk.W, pady=5)
-        notes_entry = ttk.Entry(main_frame)
-        notes_entry.insert(0, loan['notes'] or '')
-        notes_entry.grid(row=5, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=15)
-        
-        def save_changes():
-            try:
-                employee = employee_entry.get()
-                amount = float(amount_entry.get())
-                date_issued_val = date_issued.get_date().strftime('%Y-%m-%d')
-                due_date_val = due_date.get_date().strftime('%Y-%m-%d')
-                interest_rate = float(interest_entry.get())
-                notes = notes_entry.get()
-                
-                if not employee:
-                    messagebox.showerror("Error", "El nombre del empleado es obligatorio")
-                    return
-                
-                if amount <= 0:
-                    messagebox.showerror("Error", "El monto debe ser mayor a cero")
-                    return
-                
-                if interest_rate < 0:
-                    messagebox.showerror("Error", "La tasa de interés no puede ser negativa")
-                    return
-                
-                if due_date_val <= date_issued_val:
-                    messagebox.showerror("Error", "La fecha de vencimiento debe ser posterior a la fecha de préstamo")
-                    return
-                
-                self.controller.update_loan(loan_id, employee, amount, date_issued_val, due_date_val, interest_rate, notes)
-                messagebox.showinfo("Éxito", "Préstamo actualizado correctamente")
-                edit_window.destroy()
-                self.load_loans()
-                self.update_alerts()
-                
-            except ValueError:
-                messagebox.showerror("Error", "Por favor ingrese valores numéricos válidos")
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo actualizar el préstamo: {str(e)}")
-        
-        ttk.Button(button_frame, text="Guardar", command=save_changes).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancelar", command=edit_window.destroy).pack(side=tk.LEFT, padx=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-    
-    def delete_loan(self):
-        """Eliminar préstamo seleccionado"""
-        selection = self.loans_tree.selection()
-        if not selection:
-            messagebox.showwarning("Advertencia", "Seleccione un préstamo para eliminar")
-            return
-        
-        item = self.loans_tree.item(selection[0])
-        loan_id = item['values'][0]
-        employee = item['values'][1]
-        
-        if messagebox.askyesno("Confirmar", f"¿Está seguro de eliminar el préstamo de '{employee}'? Se eliminarán todos los pagos asociados."):
-            try:
-                self.controller.delete_loan(loan_id)
-                messagebox.showinfo("Éxito", "Préstamo eliminado correctamente")
-                self.load_loans()
-                self.update_alerts()
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo eliminar el préstamo: {str(e)}")
-    
+                messagebox.showerror("Error", str(e))
+
+        btns = ttk.Frame(main); btns.grid(row=5, column=0, columnspan=2, pady=10)
+        ttk.Button(btns, text="Registrar", command=do_register).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btns, text="Cancelar", command=win.destroy).pack(side=tk.LEFT, padx=5)
+        main.columnconfigure(1, weight=1)
+
+    # -----------------------------
+    # NÓMINA
+    # -----------------------------
+    def pay_salary(self):
+        try:
+            emp_id = self._get_selected_employee_id_from_combo(self.payroll_emp_cb)
+            if not emp_id:
+                messagebox.showerror("Error", "Seleccione empleado")
+                return
+            date = self.payroll_date.get_date().strftime('%Y-%m-%d')
+            method = PAY_TO_CODE[self.payroll_method.get()]
+            reg = self.payroll_register_cash.get()
+            res = self.controller.process_payroll_payment(emp_id, date, payment_method=method, register_in_cash=reg)
+            msg = (f"Empleado: {res['employee']}\n"
+                   f"Salario bruto: ${res['gross_salary']:.2f}\n"
+                   f"Deducido a préstamos: ${res['total_deducted']:.2f}\n"
+                   f"Pagado (neto): ${res['net_paid']:.2f}")
+            messagebox.showinfo("Nómina", msg)
+            self.load_loans()
+            self.update_alerts()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    # -----------------------------
+    # ALERTAS / REPORTES
+    # -----------------------------
     def update_alerts(self):
-        """Actualizar las alertas de vencimiento"""
-        overdue_loans = self.controller.get_overdue_loans()
-        
-        self.alerts_text.config(state=tk.NORMAL)
-        self.alerts_text.delete(1.0, tk.END)
-        
-        if not overdue_loans:
+        o = self.controller.get_overdue_loans()
+        self.alerts_text.config(state=tk.NORMAL); self.alerts_text.delete(1.0, tk.END)
+        if not o:
             self.alerts_text.insert(tk.END, "No hay préstamos vencidos")
         else:
             self.alerts_text.insert(tk.END, "PRÉSTAMOS VENCIDOS:\n\n")
-            for loan in overdue_loans:
-                days_overdue = (datetime.now().date() - datetime.strptime(loan['due_date'], '%Y-%m-%d').date()).days
-                self.alerts_text.insert(tk.END, 
-                    f"{loan['employee_name']}: ${loan['amount']} - {days_overdue} días de retraso\n")
-        
+            for L in o:
+                days = (datetime.now().date() - datetime.strptime(L['due_date'], '%Y-%m-%d').date()).days
+                name = L.get("employee_display") or "—"
+                self.alerts_text.insert(tk.END, f"{name}: ${float(L['amount']):.2f} - {days} días de retraso\n")
         self.alerts_text.config(state=tk.DISABLED)
-    
+
     def show_report(self):
-        """Mostrar diálogo de reportes"""
-        # Crear ventana de reportes
-        report_window = tk.Toplevel(self.parent)
-        report_window.title("Reportes de Préstamos")
-        report_window.geometry("500x400")
-        report_window.transient(self.parent)
-        
-        # Marco principal
-        main_frame = ttk.Frame(report_window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(main_frame, text="Fecha Inicio:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        start_date = DateEntry(main_frame, date_pattern='yyyy-mm-dd')
-        start_date.set_date(datetime.now() - timedelta(days=30))
-        start_date.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Fecha Fin:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        end_date = DateEntry(main_frame, date_pattern='yyyy-mm-dd')
-        end_date.set_date(datetime.now())
-        end_date.grid(row=1, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        ttk.Label(main_frame, text="Estado:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        status_filter = ttk.Combobox(main_frame, state="readonly", width=18)
-        status_filter['values'] = ('', 'active', 'paid', 'overdue')
-        status_filter.set('')
-        status_filter.grid(row=2, column=1, sticky=tk.EW, pady=5, padx=(5, 0))
-        
-        # Treeview para reporte
-        columns = ('employee', 'amount', 'issued', 'due', 'status', 'paid', 'balance')
-        report_tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
-        
-        report_tree.heading('employee', text='Empleado')
-        report_tree.heading('amount', text='Monto')
-        report_tree.heading('issued', text='Fecha Préstamo')
-        report_tree.heading('due', text='Fecha Vencimiento')
-        report_tree.heading('status', text='Estado')
-        report_tree.heading('paid', text='Pagado')
-        report_tree.heading('balance', text='Saldo')
-        
-        report_tree.column('employee', width=100)
-        report_tree.column('amount', width=80)
-        report_tree.column('issued', width=90)
-        report_tree.column('due', width=90)
-        report_tree.column('status', width=80)
-        report_tree.column('paid', width=80)
-        report_tree.column('balance', width=80)
-        
-        report_tree.grid(row=3, column=0, columnspan=2, sticky=tk.NSEW, pady=10)
-        
-        def generate_report():
-            start = start_date.get_date().strftime('%Y-%m-%d')
-            end = end_date.get_date().strftime('%Y-%m-%d')
-            status = status_filter.get() or None
-            
-            # Limpiar treeview
-            for item in report_tree.get_children():
-                report_tree.delete(item)
-            
-            # Generar reporte
-            report_data = self.controller.get_loans_report(start, end, status)
-            
-            # Agregar datos al treeview
-            for loan in report_data:
-                tags = ()
-                if loan['status'] == 'overdue':
-                    tags = ('overdue',)
-                elif loan['status'] == 'paid':
-                    tags = ('paid',)
-                
-                report_tree.insert('', 'end', values=(
-                    loan['employee_name'],
-                    f"${float(loan['amount']):.2f}",
-                    loan['date_issued'],
-                    loan['due_date'],
-                    self._translate_status(loan['status']),
-                    f"${float(loan['total_paid']):.2f}",
-                    f"${float(loan['balance']):.2f}"
-                ), tags=tags)
-            
-            # Configurar colores
-            report_tree.tag_configure('overdue', background='#ffcccc')
-            report_tree.tag_configure('paid', background='#ccffcc')
-        
-        ttk.Button(main_frame, text="Generar Reporte", command=generate_report).grid(row=4, column=0, columnspan=2, pady=10)
-        
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(3, weight=1)
-        
-        # Generar reporte inicial
-        generate_report()
+        win = tk.Toplevel(self.parent); win.title("Reportes de Préstamos"); win.geometry("640x460"); win.transient(self.parent)
+        main = ttk.Frame(win, padding=10); main.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main, text="Inicio:").grid(row=0, column=0, sticky=tk.W, pady=4)
+        start = DateEntry(main, date_pattern='yyyy-mm-dd'); start.set_date(datetime.now() - timedelta(days=30))
+        start.grid(row=0, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Fin:").grid(row=1, column=0, sticky=tk.W, pady=4)
+        end = DateEntry(main, date_pattern='yyyy-mm-dd'); end.set_date(datetime.now())
+        end.grid(row=1, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Estado:").grid(row=2, column=0, sticky=tk.W, pady=4)
+        status_cb = ttk.Combobox(main, state="readonly", values=('', 'active', 'paid', 'overdue'), width=14)
+        status_cb.set(''); status_cb.grid(row=2, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        cols = ('employee', 'amount', 'issued', 'due', 'status', 'paid', 'balance')
+        tree = ttk.Treeview(main, columns=cols, show='headings', height=14)
+        headers = {'employee': 'Empleado', 'amount': 'Monto', 'issued':'Fecha Préstamo', 'due':'Fecha Vencimiento',
+                   'status':'Estado', 'paid':'Pagado', 'balance':'Saldo'}
+        widths = {'employee':180, 'amount':90, 'issued':110, 'due':110, 'status':80, 'paid':90, 'balance':90}
+        for c in cols:
+            tree.heading(c, text=headers[c])
+            tree.column(c, width=widths[c], anchor=tk.W if c=='employee' else tk.CENTER)
+        ysb = ttk.Scrollbar(main, orient=tk.VERTICAL, command=tree.yview); tree.configure(yscrollcommand=ysb.set)
+
+        tree.grid(row=3, column=0, columnspan=2, sticky=tk.NSEW, pady=(8, 0))
+        ysb.grid(row=3, column=2, sticky=tk.NS, pady=(8, 0))
+
+        totals_lbl = ttk.Label(main, text="Totales: Monto=0.00, Pagado=0.00, Saldo=0.00", font=('Segoe UI', 9, 'bold'))
+        totals_lbl.grid(row=4, column=0, columnspan=2, sticky=tk.E, pady=(6, 0))
+
+        def generate():
+            s = start.get_date().strftime('%Y-%m-%d')
+            e = end.get_date().strftime('%Y-%m-%d')
+            st = status_cb.get() or None
+            for i in tree.get_children():
+                tree.delete(i)
+            data = self.controller.get_loans_report(s, e, st)
+            t_amount = t_paid = t_bal = 0.0
+            for L in data:
+                tree.insert('', 'end', values=(
+                    L['employee_display'], f"${float(L['amount']):.2f}",
+                    L['date_issued'], L['due_date'], self._translate_status(L['status']),
+                    f"${float(L['total_paid']):.2f}", f"${float(L['balance']):.2f}"
+                ), tags=('paid',) if L['status']=='paid' else ('overdue',) if L['status']=='overdue' else ())
+                t_amount += float(L['amount'])
+                t_paid += float(L['total_paid'])
+                t_bal += float(L['balance'])
+            tree.tag_configure('overdue', background='#ffcccc'); tree.tag_configure('paid', background='#ccffcc')
+            totals_lbl.config(text=f"Totales: Monto=${t_amount:.2f}, Pagado=${t_paid:.2f}, Saldo=${t_bal:.2f}")
+
+        ttk.Button(main, text="Generar Reporte", command=generate).grid(row=5, column=0, columnspan=2, pady=10)
+
+        main.columnconfigure(1, weight=1); main.rowconfigure(3, weight=1)
+        generate()
+
+    # -----------------------------
+    # EDICIÓN / ELIMINACIÓN
+    # -----------------------------
+    def edit_loan(self):
+        sel = self.loans_tree.selection()
+        if not sel:
+            messagebox.showwarning("Advertencia", "Seleccione un préstamo para editar")
+            return
+        loan_id = self.loans_tree.item(sel[0])['values'][0]
+        loan = self.controller.get_loan_by_id(loan_id)
+        if not loan:
+            messagebox.showerror("Error", "No se pudo obtener el préstamo")
+            return
+
+        win = tk.Toplevel(self.parent); win.title("Editar Préstamo"); win.geometry("480x340"); win.transient(self.parent); win.grab_set()
+        main = ttk.Frame(win, padding=10); main.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main, text="Empleado:").grid(row=0, column=0, sticky=tk.W, pady=4)
+        emp_cb = ttk.Combobox(main, state="readonly", width=30)
+        emps = self.controller.list_employees()
+        emp_cb['values'] = [f"{e['id']} - {e['first_name']} {e['last_name']}" for e in emps]
+        current_emp = f"{loan.get('employee_id') or ''} - {loan.get('first_name','') or ''} {loan.get('last_name','') or ''}".strip()
+        # fallback
+        if loan.get('employee_id'):
+            emp_cb.set(f"{loan['employee_id']} - {loan.get('first_name','')} {loan.get('last_name','')}")
+        elif emp_cb['values']:
+            emp_cb.set(emp_cb['values'][0])
+
+        ttk.Label(main, text="Monto:").grid(row=1, column=0, sticky=tk.W, pady=4)
+        amount_e = ttk.Entry(main); amount_e.insert(0, str(loan['amount'])); amount_e.grid(row=1, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Fecha préstamo:").grid(row=2, column=0, sticky=tk.W, pady=4)
+        d1 = DateEntry(main, date_pattern='yyyy-mm-dd'); d1.set_date(datetime.strptime(loan['date_issued'], '%Y-%m-%d'))
+        d1.grid(row=2, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Vence:").grid(row=3, column=0, sticky=tk.W, pady=4)
+        d2 = DateEntry(main, date_pattern='yyyy-mm-dd'); d2.set_date(datetime.strptime(loan['due_date'], '%Y-%m-%d'))
+        d2.grid(row=3, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Interés (%):").grid(row=4, column=0, sticky=tk.W, pady=4)
+        intr_e = ttk.Entry(main); intr_e.insert(0, str(loan['interest_rate'])); intr_e.grid(row=4, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        ttk.Label(main, text="Notas:").grid(row=5, column=0, sticky=tk.W, pady=4)
+        notes_e = ttk.Entry(main); notes_e.insert(0, loan.get('notes') or ''); notes_e.grid(row=5, column=1, sticky=tk.EW, pady=4, padx=(5, 0))
+
+        def save():
+            try:
+                emp_id = None
+                val = emp_cb.get()
+                if val and " - " in val:
+                    emp_id = int(val.split(" - ", 1)[0])
+                amount = float(amount_e.get())
+                di = d1.get_date().strftime('%Y-%m-%d')
+                dd = d2.get_date().strftime('%Y-%m-%d')
+                intr = float(intr_e.get() or "0")
+                notes = notes_e.get()
+                self.controller.update_loan(loan_id, emp_id, amount, di, dd, intr, notes)
+                messagebox.showinfo("Préstamo", "Actualizado correctamente")
+                win.destroy()
+                self.load_loans()
+                self.update_alerts()
+            except ValueError:
+                messagebox.showerror("Error", "Valores inválidos")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+        btns = ttk.Frame(main); btns.grid(row=6, column=0, columnspan=2, pady=10)
+        ttk.Button(btns, text="Guardar", command=save).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btns, text="Cancelar", command=win.destroy).pack(side=tk.LEFT, padx=6)
+        main.columnconfigure(1, weight=1)
+
+    def delete_loan(self):
+        sel = self.loans_tree.selection()
+        if not sel:
+            messagebox.showwarning("Advertencia", "Seleccione un préstamo para eliminar")
+            return
+        loan_id = self.loans_tree.item(sel[0])['values'][0]
+        emp = self.loans_tree.item(sel[0])['values'][1]
+        if messagebox.askyesno("Confirmar", f"¿Eliminar el préstamo de '{emp}'? Se eliminarán también sus pagos."):
+            try:
+                self.controller.delete_loan(loan_id)
+                messagebox.showinfo("Préstamo", "Eliminado correctamente")
+                self.load_loans()
+                self.update_alerts()
+            except Exception as e:
+                messagebox.showerror("Error", str(e))

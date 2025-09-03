@@ -7,6 +7,7 @@ from datetime import datetime
 import threading
 from tkinter import messagebox
 from utils.notifications import NotificationSystem, NotificationCenter
+from utils.scrollframe import ScrollFrame
 from help.help_system import HelpSystem, QuickHelp
 
 class MainWindow:
@@ -116,50 +117,112 @@ class MainWindow:
                   command=lambda: self.help_system.show_help('ventas')).pack(side=tk.LEFT, padx=2, pady=2)
     
     def setup_notebook(self):
-        """Configurar el notebook con pestañas para cada módulo"""
+        """Configurar el notebook con pestañas para cada módulo (con scroll)."""
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # Importar las vistas de cada módulo
-        try:
-            from modules.cash_register.views import CashRegisterView
-            from modules.loans.views import LoansView
-            from modules.inventory.views import InventoryView
-            # NUEVO: ventas
-            from modules.sales.views import SalesView
-            # Controlador de caja para pasar a ventas
-            from modules.cash_register.controller import CashRegisterController
 
-            # Instancia compartida de controlador de caja para ventas
-            self.cash_controller = CashRegisterController(self.db, self.auth_manager)
-            
-            # Crear pestaña para módulo de ventas (salidas + impacto en caja e inventario)
-            sales_frame = ttk.Frame(self.notebook)
-            self.notebook.add(sales_frame, text="Ventas")
-            self.sales_view = SalesView(sales_frame, self.db, self.auth_manager, self.cash_controller)
-            
-            # Crear pestaña para módulo de caja
-            cash_frame = ttk.Frame(self.notebook)
-            self.notebook.add(cash_frame, text="Módulo de Caja")
-            self.cash_view = CashRegisterView(cash_frame, self.db, self.auth_manager)
-            
-            # Crear pestaña para módulo de inventario (solo existencias)
-            inventory_frame = ttk.Frame(self.notebook)
-            self.notebook.add(inventory_frame, text="Inventario de Papa")
-            self.inventory_view = InventoryView(inventory_frame, self.db, self.auth_manager)
-            
-            # Crear pestaña para módulo de préstamos
-            loans_frame = ttk.Frame(self.notebook)
-            self.notebook.add(loans_frame, text="Préstamos a Empleados")
-            self.loans_view = LoansView(loans_frame, self.db, self.auth_manager)
-            
-        except ImportError as e:
-            # Placeholder en caso de error
-            for tab_name in ["Módulo de Caja", "Préstamos a Empleados", "Inventario de Papa", "Ventas"]:
-                frame = ttk.Frame(self.notebook)
-                self.notebook.add(frame, text=tab_name)
-                label = ttk.Label(frame, text=f"{tab_name} - Error al cargar: {str(e)}")
-                label.pack(pady=20)
+        try:
+            # Import dinámico de vistas disponibles
+            from modules.cash_register.views import CashRegisterView
+        except Exception:
+            CashRegisterView = None
+        try:
+            from modules.sales.views import SalesView
+        except Exception:
+            SalesView = None
+        try:
+            from modules.loans.views import LoansView
+        except Exception:
+            LoansView = None
+        try:
+            from modules.inventory.views import InventoryView
+        except Exception:
+            InventoryView = None
+        try:
+            from modules.employees.views import EmployeesView
+        except Exception:
+            EmployeesView = None
+        try:
+            from modules.payroll.views import PayrollReportView
+        except Exception:
+            PayrollReportView = None
+
+        # Helper para crear pestañas con scroll y montar la vista
+        def _add_tab(title, ViewClass, attr_name, *extra_args):
+            frame = ttk.Frame(self.notebook)
+            self.notebook.add(frame, text=title)
+            if ViewClass is None:
+                ttk.Label(frame, text=f"{title} - No disponible (módulo no encontrado)").pack(pady=20)
+                return
+            scroll = ScrollFrame(frame, fit_width=True)
+            scroll.pack(fill=tk.BOTH, expand=True)
+            parent_for_view = scroll.body  # aquí la vista puede usar pack/grid sin restricciones
+            view = ViewClass(parent_for_view, self.db, self.auth_manager, *extra_args)
+            setattr(self, attr_name, view)
+
+        # Crea pestañas (solo las que existan en tu proyecto)
+        _add_tab("Módulo de Caja", CashRegisterView, "cash_view")
+        if SalesView:
+            # si tienes módulo de ventas
+            try:
+                from modules.cash_register.controller import CashRegisterController
+                self.cash_controller = CashRegisterController(self.db, self.auth_manager)
+                _add_tab("Ventas", SalesView, "sales_view", self.cash_controller)
+            except Exception:
+                _add_tab("Ventas", SalesView, "sales_view")
+        _add_tab("Préstamos a Empleados", LoansView, "loans_view")
+        _add_tab("Inventario de Papa", InventoryView, "inventory_view")
+        _add_tab("Empleados", EmployeesView, "employees_view")
+        _add_tab("Nómina", PayrollReportView, "payroll_view")
+
+        # refresco al cambiar de pestaña (si ya tienes uno, mantén el tuyo)
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self.root.bind("<F5>", lambda e: self.refresh_current_tab())
+
+    
+    def _refresh_view_safely(self, view):
+        """Intenta llamar el método de refresco que exista en la vista."""
+        if not view:
+            return
+        for name in (
+            "refresh_all", "reload", "refresh", "load", "load_data",
+            "load_transactions", "load_loans", "load_inventory", "load_sales"
+        ):
+            if hasattr(view, name):
+                try:
+                    getattr(view, name)()
+                except Exception as e:
+                    from tkinter import messagebox
+                    messagebox.showerror("Error", f"No se pudo refrescar el módulo: {e}")
+                break  # encontró un método válido
+
+    def _on_tab_changed(self, event):
+        """Se dispara al cambiar de pestaña: refresca solo ese módulo."""
+        try:
+            tab_text = event.widget.tab(event.widget.select(), "text").lower()
+            if "venta" in tab_text and hasattr(self, "sales_view"):
+                self._refresh_view_safely(self.sales_view)
+            elif "caja" in tab_text and hasattr(self, "cash_view"):
+                self._refresh_view_safely(self.cash_view)
+            elif ("préstamo" in tab_text or "prestamo" in tab_text) and hasattr(self, "loans_view"):
+                self._refresh_view_safely(self.loans_view)
+            elif "inventario" in tab_text and hasattr(self, "inventory_view"):
+                self._refresh_view_safely(self.inventory_view)
+            elif "emplead" in tab_text and hasattr(self, "employees_view"):
+                self._refresh_view_safely(self.employees_view)
+            elif "nómina" in tab_text or "nomina" in tab_text:
+                if hasattr(self, "payroll_view"):
+                    self._refresh_view_safely(self.payroll_view)
+            else:
+                # Si no reconoce la pestaña, como fallback refresca todo
+                self.refresh_all()
+        except Exception:
+            pass
+
+    def refresh_current_tab(self):
+        """Refresca la pestaña activa (atajo para F5 y para usar donde quieras)."""
+        self._on_tab_changed(type("E", (object,), {"widget": self.notebook})())
+
     
     def setup_status_bar(self):
         """Configurar la barra de estado"""
