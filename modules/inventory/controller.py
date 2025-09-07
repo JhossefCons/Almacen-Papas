@@ -93,13 +93,17 @@ class InventoryController:
         row = self.db.execute_query("SELECT sacks_count FROM packaging_stock WHERE id = 1")
         return int(row[0]["sacks_count"]) if row else 0
 
-    def add_sacks(self, amount: int):
+    def add_sacks(self, amount: int, price: float = None):
         if amount <= 0:
             raise ValueError("La cantidad de costales debe ser positiva")
-        self.db.execute_query(
-            "UPDATE packaging_stock SET sacks_count = sacks_count + ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
-            (int(amount),),
-        )
+        update_fields = ["sacks_count = sacks_count + ?"]
+        params = [int(amount)]
+        if price is not None:
+            update_fields.append("sack_price = ?")
+            params.append(float(price))
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        query = f"UPDATE packaging_stock SET {', '.join(update_fields)} WHERE id = 1"
+        self.db.execute_query(query, tuple(params))
 
     def set_sacks(self, new_count: int):
         self._require_admin()
@@ -120,6 +124,10 @@ class InventoryController:
             "UPDATE packaging_stock SET sacks_count = sacks_count - ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
             (int(amount),),
         )
+
+    def get_sack_price(self) -> float:
+        row = self.db.execute_query("SELECT sack_price FROM packaging_stock WHERE id = 1")
+        return float(row[0]["sack_price"]) if row and row[0]["sack_price"] is not None else 0.0
 
     # ------------------------------
     # Altas / consultas / actualización
@@ -159,8 +167,8 @@ class InventoryController:
     ) -> int:
         """
         unit_price:
-          - para 'entry' = PRECIO DE COMPRA (costo)
-          - para 'exit'  = PRECIO DE VENTA aplicado
+        - 'entry' = PRECIO DE COMPRA (costo)
+        - 'exit'  = PRECIO DE VENTA aplicado
         """
         if not self.auth.current_user:
             raise Exception("Usuario no autenticado")
@@ -178,26 +186,34 @@ class InventoryController:
             if self.get_sacks_count() < quantity:
                 raise ValueError(f"No hay suficientes costales para la venta ({quantity} requeridos).")
 
-        total_value = round(quantity * unit_price, 2)
-        insert = """
+        total_value = round(quantity * float(unit_price), 2)
+
+        # ✅ user_id correcto (coherente con el resto del código)
+        user_id_val = (self.auth.current_user["id"]
+                    if isinstance(self.auth.current_user, dict) and "id" in self.auth.current_user
+                    else self.auth.current_user)
+
+        insert_sql = """
             INSERT INTO potato_inventory
                 (date, potato_type, quality, operation, quantity, unit_price, total_value,
-                 supplier_customer, notes, user_id, created_at)
+                supplier_customer, notes, user_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user_id_val = int(self.auth.current_user)
         params = (
             date, potato_type, quality, operation, int(quantity), float(unit_price),
             total_value, (supplier_customer or "").strip(), (notes or "").strip(), user_id_val, now,
         )
-        self.db.execute_query(insert, params)
 
+        # ✅ Esto COMMIT ya (tu execute_query lo hace para no-SELECT) y devuelve el id insertado
+        new_id = self.db.execute_query(insert_sql, params)
+
+        # Si es salida, descontar costales (también COMMIT)
         if operation == "exit":
             self.consume_sacks(quantity)
 
-        row = self.db.execute_query("SELECT id FROM potato_inventory ORDER BY id DESC LIMIT 1")
-        return int(row[0]["id"]) if row else -1
+        return int(new_id)
+
 
     def get_current_stock(self, potato_type: Optional[str] = None, quality: Optional[str] = None) -> int:
         where, params = "", []
@@ -302,8 +318,7 @@ class InventoryController:
                     "avg_cost": avg_cost,
                     "cost_value": cost_value,
                     "ref_price": ref_price,
-                    "potential_revenue": potential_revenue,
-                    "potential_margin": margin
+                    "potential_revenue": potential_revenue
                 })
         return result
 
@@ -367,3 +382,55 @@ class InventoryController:
             self.add_inventory_record(date, t, q, "entry", delta, 0.0, "ajuste", f"Ajuste admin. {note or ''}".strip())
         else:
             self.add_inventory_record(date, t, q, "exit", -delta, 0.0, "ajuste", f"Ajuste admin. {note or ''}".strip())
+            
+    def get_reference_sale_price(self, potato_type: str, quality: str):
+        """
+        Devuelve el precio de VENTA de referencia para (tipo, calidad).
+        Intenta en este orden:
+        1) Tabla de referencias (si existe): price_reference
+        2) Última ENTRADA con columna sale_unit_price (si existe en potato_inventory)
+        3) Última SALIDA (exit) como último recurso
+        """
+        potato_type = potato_type.lower().strip()
+        quality = quality.lower().strip()
+
+        # 1) Tabla de referencias, si la usas
+        try:
+            rows = self.db.execute_query("""
+                SELECT sale_price
+                  FROM price_reference
+                 WHERE potato_type=? AND quality=?
+                 ORDER BY updated_at DESC
+                 LIMIT 1
+            """, (potato_type, quality))
+            if rows:
+                return float(rows[0]["sale_price"])
+        except Exception:
+            pass
+
+        # 2) Última ENTRADA con columna sale_unit_price (si la tienes en potato_inventory)
+        try:
+            rows = self.db.execute_query("""
+                SELECT sale_unit_price AS p
+                  FROM potato_inventory
+                 WHERE operation='entry'
+                   AND potato_type=? AND quality=?
+                   AND sale_unit_price IS NOT NULL
+                 ORDER BY date DESC, id DESC
+                 LIMIT 1
+            """, (potato_type, quality))
+            if rows and rows[0]["p"] is not None:
+                return float(rows[0]["p"])
+        except Exception:
+            pass
+
+        # 3) Última SALIDA (exit) – sólo como último recurso
+        rows = self.db.execute_query("""
+            SELECT unit_price
+              FROM potato_inventory
+             WHERE operation='exit'
+               AND potato_type=? AND quality=?
+             ORDER BY date DESC, id DESC
+             LIMIT 1
+        """, (potato_type, quality))
+        return float(rows[0]["unit_price"]) if rows else None

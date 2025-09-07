@@ -1,16 +1,14 @@
 """
 Vista de Ventas (Tkinter + ttk)
-- Selección de tipo/calidad, cantidad
-- Precio unitario (autollenado con último precio; editable opcional)
-- Método de pago
-- Cliente y notas
-- Impacta inventario y costales; registra ingreso en caja
+- Registrar venta (impacta inventario, costales y Caja)
+- Historial con filtros (fecha, tipo, calidad)
+- Totales y Exportar PDF
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from tkcalendar import DateEntry
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from modules.sales.controller import SalesController
 from modules.inventory.controller import VALID_COMBOS
@@ -29,6 +27,7 @@ class SalesView:
         self._build_ui()
         self._auto_fill_price()
         self._refresh_stock_labels()
+        self._load_sales() 
 
     # ---------------------------
     # UI
@@ -37,12 +36,15 @@ class SalesView:
         container = ttk.Frame(self.parent, padding=8)
         container.pack(fill=tk.BOTH, expand=True)
 
-        left = ttk.LabelFrame(container, text="Nueva venta")
+        # Panel izquierdo: Nueva venta
+        left = ttk.LabelFrame(container, text="Nueva venta", padding=10)
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        right = ttk.LabelFrame(container, text="Disponibilidad")
+        # Panel derecho: Historial y filtros
+        right = ttk.Frame(container)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        # ---- Formulario de venta ----
         row = 0
         ttk.Label(left, text="Fecha:").grid(row=row, column=0, sticky=tk.W, pady=2)
         self.date_entry = DateEntry(left, date_pattern="yyyy-mm-dd")
@@ -69,7 +71,7 @@ class SalesView:
         self.qty_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        ttk.Label(left, text="Precio unitario:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        ttk.Label(left, text="Precio unitario (venta):").grid(row=row, column=0, sticky=tk.W, pady=2)
         self.unit_price_entry = ttk.Entry(left)
         self.unit_price_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
@@ -108,21 +110,94 @@ class SalesView:
         ttk.Button(btnf, text="Registrar venta", command=self._create_sale).pack(side=tk.LEFT)
         row += 1
 
-        # Panel derecha: disponibilidad
-        self.stock_label = ttk.Label(right, text="Stock seleccionado: -")
-        self.stock_label.pack(anchor=tk.W, pady=(6, 2), padx=8)
-
-        self.sacks_label = ttk.Label(right, text="Costales disponibles: -")
-        self.sacks_label.pack(anchor=tk.W, pady=(0, 8), padx=8)
-
         for c in (0, 1):
             left.grid_columnconfigure(c, weight=1)
 
         # Por defecto el precio es autollenado (campo bloqueado)
         self._apply_price_state(disable_when_auto=True)
 
+        # ---- Filtros y acciones (derecha) ----
+        filters = ttk.LabelFrame(right, text="Historial de ventas - Filtros", padding=8)
+        filters.pack(fill=tk.X)
+
+        ttk.Label(filters, text="Desde:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.start_de = DateEntry(filters, date_pattern='yyyy-mm-dd')
+        self.start_de.set_date(datetime.now() - timedelta(days=30))
+        self.start_de.grid(row=0, column=1, sticky=tk.W, padx=(4, 12))
+
+        ttk.Label(filters, text="Hasta:").grid(row=0, column=2, sticky=tk.W, pady=2)
+        self.end_de = DateEntry(filters, date_pattern='yyyy-mm-dd')
+        self.end_de.set_date(datetime.now())
+        self.end_de.grid(row=0, column=3, sticky=tk.W, padx=(4, 12))
+
+        ttk.Label(filters, text="Tipo:").grid(row=0, column=4, sticky=tk.W, pady=2)
+        self.f_type = ttk.Combobox(filters, state="readonly", values=("", *VALID_COMBOS.keys()), width=12)
+        self.f_type.set("")
+        self.f_type.grid(row=0, column=5, sticky=tk.W, padx=(4, 12))
+
+        ttk.Label(filters, text="Calidad:").grid(row=0, column=6, sticky=tk.W, pady=2)
+        self.f_quality = ttk.Combobox(filters, state="readonly", values=("",), width=14)
+        self.f_quality.set("")
+        self.f_quality.grid(row=0, column=7, sticky=tk.W, padx=(4, 12))
+
+        def on_filter_type_change(_=None):
+            t = (self.f_type.get() or "").strip().lower()
+            if t and t in VALID_COMBOS:
+                self.f_quality.config(values=("", *VALID_COMBOS[t]))
+            else:
+                self.f_quality.config(values=("",))
+            self.f_quality.set("")
+
+        self.f_type.bind("<<ComboboxSelected>>", on_filter_type_change)
+
+        ttk.Button(filters, text="Aplicar", command=self._load_sales).grid(row=0, column=8, padx=(8, 4))
+        ttk.Button(filters, text="Exportar PDF", command=self._export_pdf).grid(row=0, column=9, padx=(4, 0))
+
+        for i in range(10):
+            filters.grid_columnconfigure(i, weight=1)
+
+        # ---- Tabla historial ----
+        table_box = ttk.Frame(right)
+        table_box.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+
+        columns = ('date','type','quality','qty','unit','total','customer','pay','user','notes')
+        self.sales_tree = ttk.Treeview(table_box, columns=columns, show='headings')
+
+        headers = {
+            'date': 'Fecha',
+            'type': 'Tipo',
+            'quality': 'Calidad',
+            'qty': 'Bultos',
+            'unit': 'Precio U.',
+            'total': 'Total',
+            'customer': 'Cliente',
+            'pay': 'Pago',
+            'user': 'Usuario',
+            'notes': 'Notas'
+        }
+        widths = {'date':100, 'type':90, 'quality':100, 'qty':70, 'unit':90, 'total':100, 'customer':140, 'pay':110, 'user':100, 'notes':220}
+        anchors = {'date':tk.CENTER, 'type':tk.W, 'quality':tk.W, 'qty':tk.CENTER, 'unit':tk.E, 'total':tk.E, 'customer':tk.W, 'pay':tk.CENTER, 'user':tk.W, 'notes':tk.W}
+
+        for c in columns:
+            self.sales_tree.heading(c, text=headers[c])
+            self.sales_tree.column(c, width=widths[c], anchor=anchors[c])
+
+        ysb = ttk.Scrollbar(table_box, orient=tk.VERTICAL, command=self.sales_tree.yview)
+        xsb = ttk.Scrollbar(table_box, orient=tk.HORIZONTAL, command=self.sales_tree.xview)
+        self.sales_tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
+
+        self.sales_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        ysb.pack(side=tk.RIGHT, fill=tk.Y)
+        xsb.pack(fill=tk.X)
+
+        # ---- Totales ----
+        totals_box = ttk.Frame(right)
+        totals_box.pack(fill=tk.X, pady=(6,0))
+        self.totals_lbl = ttk.Label(totals_box, text="Totales: —", font=('Segoe UI', 9, 'bold'))
+        self.totals_lbl.pack(anchor=tk.E)
+
     # ---------------------------
-    # Helpers
+    # Helpers (form)
     # ---------------------------
     def _reload_quality_options(self, potato_type: str):
         values = VALID_COMBOS.get(potato_type.lower(), [])
@@ -168,10 +243,21 @@ class SalesView:
             q = self.quality_cb.get().strip().lower()
             stock = self.controller.get_stock(t, q)
             sacks = self.controller.get_sacks()
-            self.stock_label.config(text=f"Stock seleccionado: {stock} bultos")
-            self.sacks_label.config(text=f"Costales disponibles: {sacks}")
+            self._set_stock_text(f"Stock seleccionado: {stock} bultos")
+            self._set_sacks_text(f"Costales disponibles: {sacks}")
         except Exception as e:
-            self.stock_label.config(text=f"Stock seleccionado: ? ({e})")
+            self._set_stock_text(f"Stock seleccionado: ? ({e})")
+
+    def _set_stock_text(self, text):
+        # crea si no existe (por si se llama antes de construir)
+        if not hasattr(self, "stock_label"):
+            self.stock_label = ttk.Label(self.parent)
+        self.stock_label.config(text=text)
+
+    def _set_sacks_text(self, text):
+        if not hasattr(self, "sacks_label"):
+            self.sacks_label = ttk.Label(self.parent)
+        self.sacks_label.config(text=text)
 
     def _reset_form(self):
         self.qty_entry.delete(0, tk.END)
@@ -184,7 +270,7 @@ class SalesView:
         self._apply_price_state(disable_when_auto=True)
 
     # ---------------------------
-    # Acción
+    # Acciones formulario
     # ---------------------------
     def _create_sale(self):
         try:
@@ -222,7 +308,163 @@ class SalesView:
             messagebox.showinfo("Venta", "Venta registrada correctamente.")
             self._refresh_stock_labels()
             self._reset_form()
+            self._load_sales() 
+            try:
+                self.parent.event_generate("<<SaleCreated>>", when="tail")
+            except Exception:
+                pass
         except ValueError as ve:
             messagebox.showerror("Error", str(ve))
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+    # ---------------------------
+    # Historial / Reporte
+    # ---------------------------
+    def _get_filters(self):
+        start = self.start_de.get_date().strftime('%Y-%m-%d')
+        end = self.end_de.get_date().strftime('%Y-%m-%d')
+        t = (self.f_type.get() or "").strip().lower() or None
+        q = (self.f_quality.get() or "").strip().lower() or None
+        return start, end, t, q
+
+    def _load_sales(self):
+        # limpiar
+        for i in self.sales_tree.get_children():
+            self.sales_tree.delete(i)
+
+        start, end, t, q = self._get_filters()
+        try:
+            rows, totals = self.controller.get_sales_report(start, end, t, q)
+
+            if not rows:
+                self.sales_tree.insert('', 'end', values=("— Sin ventas —","","","","","","","","",""))
+                self.totals_lbl.config(text="Totales: 0 bultos | $0.00")
+                return
+
+            for r in rows:
+                pay = r.get('payment_method')
+                pay_disp = CODE_TO_PAY.get(pay, '—') if pay else '—'
+                self.sales_tree.insert(
+                    '', 'end',
+                    values=(
+                        r['date'],
+                        r['potato_type'],
+                        r['quality'],
+                        int(r['quantity']),
+                        f"${float(r['unit_price']):.2f}",
+                        f"${float(r['total_value']):.2f}",
+                        r.get('supplier_customer') or '',
+                        pay_disp,
+                        r.get('username') or '',
+                        r.get('notes') or ''
+                    )
+                )
+            self.sales_tree.tag_configure('entry', background='#eefeef')  # verde claro
+            self.sales_tree.tag_configure('exit',  background='#ffefef')  # rojo claro
+
+            self.totals_lbl.config(
+                text=f"Totales: {int(totals['quantity'])} bultos | ${float(totals['amount']):.2f}"
+            )
+        except Exception as e:
+            messagebox.showerror("Historial de ventas", str(e))
+
+    def _export_pdf(self):
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+        except ImportError:
+            messagebox.showerror("Falta dependencia", "Para generar PDF necesitas instalar reportlab:\n\npip install reportlab")
+            return
+
+        start, end, t, q = self._get_filters()
+        try:
+            data, totals = self.controller.get_sales_report(start, end, t, q)
+        except Exception as e:
+            messagebox.showerror("Reporte de Ventas", f"Error obteniendo datos: {e}")
+            return
+
+        if not data:
+            messagebox.showwarning("Reporte de Ventas", "No hay ventas en el período seleccionado.")
+            return
+
+        default_name = f"reporte_ventas_{start.replace('-','')}_{end.replace('-','')}.pdf"
+        path = filedialog.asksaveasfilename(
+            title="Guardar reporte como",
+            defaultextension=".pdf",
+            initialfile=default_name,
+            filetypes=[("PDF","*.pdf")]
+        )
+        if not path:
+            return
+
+        try:
+            doc = SimpleDocTemplate(
+                path, pagesize=landscape(A4),
+                leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=22
+            )
+            styles = getSampleStyleSheet()
+            title = Paragraph("<b>Reporte de Ventas</b>", styles['Title'])
+
+            meta = Paragraph(
+                f"Período: <b>{start}</b> a <b>{end}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+                f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                styles['Normal']
+            )
+
+            table_data = [["Fecha","Tipo","Calidad","Bultos","Precio U.","Total","Cliente","Pago","Usuario","Notas"]]
+            for r in data:
+                pay = r.get('payment_method')
+                pay_disp = CODE_TO_PAY.get(pay, '—') if pay else '—'
+                table_data.append([
+                    r['date'],
+                    r['potato_type'],
+                    r['quality'],
+                    str(int(r['quantity'])),
+                    f"${float(r['unit_price']):,.2f}",
+                    f"${float(r['total_value']):,.2f}",
+                    r.get('supplier_customer') or '',
+                    pay_disp,
+                    r.get('username') or '',
+                    r.get('notes') or ''
+                ])
+
+            # Totales
+            table_data.append([
+                "Totales", "", "", str(int(totals['quantity'])),
+                "", f"${float(totals['amount']):,.2f}", "", "", "", ""
+            ])
+
+            tbl = Table(table_data, repeatRows=1)
+            tbl.setStyle(TableStyle([
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f0f0f0')),
+                ('ALIGN', (3,1), (3,-2), 'CENTER'),  # Bultos
+                ('ALIGN', (4,1), (5,-2), 'RIGHT'),   # Precios
+                ('ALIGN', (7,1), (8,-2), 'CENTER'),  # Pago / Usuario
+                ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#cccccc')),
+                ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#fbfbfb')]),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#e8f5e9')),
+            ]))
+
+            story = [title, Spacer(0, 8), meta, Spacer(0, 10), tbl]
+
+            def _footer(canvas, doc):
+                canvas.saveState()
+                canvas.setFont("Helvetica", 9)
+                canvas.drawRightString(doc.pagesize[0]-18, 12, f"Página {doc.page}")
+                canvas.restoreState()
+
+            doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+            messagebox.showinfo("Reporte de Ventas", f"PDF generado correctamente:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Reporte de Ventas", f"No se pudo generar el PDF:\n{e}")
+
+    # públicos (para refresco general desde MainWindow)
+    def refresh_all(self):
+        self._auto_fill_price()
+        self._refresh_stock_labels()
+        self._load_sales()

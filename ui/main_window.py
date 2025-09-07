@@ -178,6 +178,32 @@ class MainWindow:
         # refresco al cambiar de pestaña (si ya tienes uno, mantén el tuyo)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self.root.bind("<F5>", lambda e: self.refresh_current_tab())
+        
+        # 🔔 Escuchar ventas creadas para refrescar Inventario en caliente
+        self.root.bind("<<SaleCreated>>", lambda e: self._on_sale_created())
+
+    def _on_sale_created(self):
+        try:
+            # Refrescar Inventario enseguida
+            if hasattr(self, "inventory_view") and self.inventory_view:
+                if hasattr(self.inventory_view, "refresh_all"):
+                    self.inventory_view.refresh_all()
+                else:
+                    # fallbacks
+                    if hasattr(self.inventory_view, "refresh_stock_table"):
+                        self.inventory_view.refresh_stock_table()
+                    if hasattr(self.inventory_view, "refresh_valuation_table"):
+                        self.inventory_view.refresh_valuation_table()
+                    if hasattr(self.inventory_view, "refresh_sacks_label"):
+                        self.inventory_view.refresh_sacks_label()
+            # Opcional: también refrescar indicadores en la vista de ventas
+            if hasattr(self, "sales_view") and self.sales_view:
+                if hasattr(self.sales_view, "_refresh_stock_labels"):
+                    self.sales_view._refresh_stock_labels()
+                if hasattr(self.sales_view, "_auto_fill_price"):
+                    self.sales_view._auto_fill_price()
+        except Exception as ex:
+            print("No se pudo refrescar tras venta:", ex)
 
     
     def _refresh_view_safely(self, view):
@@ -288,12 +314,16 @@ class MainWindow:
             
             # Inventario (nueva vista usa refresh_table)
             if hasattr(self, 'inventory_view'):
-                if hasattr(self.inventory_view, 'refresh_table'):
-                    self.inventory_view.refresh_table()
-                elif hasattr(self.inventory_view, 'load_inventory'):
-                    self.inventory_view.load_inventory()
-                elif hasattr(self.inventory_view, 'refresh'):
-                    self.inventory_view.refresh()
+                if hasattr(self.inventory_view, 'refresh_all'):
+                    self.inventory_view.refresh_all()
+                else:
+                    # fallback por si en algún momento cambiaste nombres
+                    if hasattr(self.inventory_view, 'refresh_stock_table'):
+                        self.inventory_view.refresh_stock_table()
+                    if hasattr(self.inventory_view, 'refresh_valuation_table'):
+                        self.inventory_view.refresh_valuation_table()
+                    if hasattr(self.inventory_view, 'refresh_sacks_label'):
+                        self.inventory_view.refresh_sacks_label()
             
             # Ventas (refrescar stocks y precio sugerido)
             if hasattr(self, 'sales_view'):

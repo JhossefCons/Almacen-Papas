@@ -313,7 +313,7 @@ class InventoryView:
                 if unit_price < 0:
                     raise ValueError("El precio por costal no puede ser negativo.")
 
-            self.controller.add_sacks(amount)
+            self.controller.add_sacks(amount, unit_price)
 
             if self.sacks_register_cash.get():
                 total = round(amount * unit_price, 2)
@@ -440,7 +440,8 @@ class InventoryView:
             if avg_cost is None or ref_price is None:
                 gain_text = "-"
             else:
-                gain_total = stock * (ref_price - avg_cost-1000)
+                sack_price = self.controller.get_sack_price()
+                gain_total = stock * (ref_price - avg_cost - sack_price)
                 gain_text = f"{gain_total:.2f}"
 
             self.valuation_tree.insert(

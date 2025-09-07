@@ -117,14 +117,21 @@ class Database:
             CREATE TABLE IF NOT EXISTS packaging_stock (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 sacks_count INTEGER NOT NULL DEFAULT 0,
+                sack_price REAL DEFAULT 0,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Agregar columna sack_price si no existe
+        try:
+            cursor.execute("ALTER TABLE packaging_stock ADD COLUMN sack_price REAL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # columna ya existe
+
         cursor.execute("SELECT COUNT(*) AS c FROM packaging_stock WHERE id = 1")
         row = cursor.fetchone()
         if not row or row["c"] == 0:
             cursor.execute(
-                "INSERT INTO packaging_stock (id, sacks_count, updated_at) VALUES (1, 0, CURRENT_TIMESTAMP)"
+                "INSERT INTO packaging_stock (id, sacks_count, sack_price, updated_at) VALUES (1, 0, 0, CURRENT_TIMESTAMP)"
             )
 
         conn.commit()
