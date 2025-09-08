@@ -27,7 +27,7 @@ class SalesView:
         self._build_ui()
         self._auto_fill_price()
         self._refresh_stock_labels()
-        self._load_sales() 
+        self._load_sales()  # al abrir, ver últimos 30 días
 
     # ---------------------------
     # UI
@@ -156,43 +156,50 @@ class SalesView:
         for i in range(10):
             filters.grid_columnconfigure(i, weight=1)
 
-        # ---- Tabla historial ----
-        table_box = ttk.Frame(right)
-        table_box.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
-        columns = ('date','type','quality','qty','unit','total','customer','pay','user','notes')
-        self.sales_tree = ttk.Treeview(table_box, columns=columns, show='headings')
+        # ---- Tabla historial con scroll ----
+        sales_frame = ttk.LabelFrame(right, text="Historial de ventas", padding=(6, 6, 6, 6))
+        sales_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+
+        sales_frame.grid_rowconfigure(0, weight=1)
+        sales_frame.grid_columnconfigure(0, weight=1)
+
+        columns = ('date', 'type', 'quality', 'qty', 'unit', 'total', 'customer', 'pay', 'user', 'notes')
+        self.sales_tree = ttk.Treeview(
+            sales_frame, columns=columns, show='headings', height=18, style="Sales.Treeview"
+        )
+
+        ysb = ttk.Scrollbar(sales_frame, orient=tk.VERTICAL, command=self.sales_tree.yview)
+        xsb = ttk.Scrollbar(sales_frame, orient=tk.HORIZONTAL, command=self.sales_tree.xview)
+        self.sales_tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
+
+        self.sales_tree.grid(row=0, column=0, sticky="nsew")
+        ysb.grid(row=0, column=1, sticky="ns")
+        xsb.grid(row=1, column=0, sticky="ew")
 
         headers = {
-            'date': 'Fecha',
-            'type': 'Tipo',
-            'quality': 'Calidad',
-            'qty': 'Bultos',
-            'unit': 'Precio U.',
-            'total': 'Total',
-            'customer': 'Cliente',
-            'pay': 'Pago',
-            'user': 'Usuario',
-            'notes': 'Notas'
+            'date': 'Fecha', 'type': 'Tipo', 'quality': 'Calidad', 'qty': 'Bultos',
+            'unit': 'Precio U.', 'total': 'Total', 'customer': 'Cliente', 'pay': 'Pago',
+            'user': 'Usuario', 'notes': 'Notas'
         }
-        widths = {'date':100, 'type':90, 'quality':100, 'qty':70, 'unit':90, 'total':100, 'customer':140, 'pay':110, 'user':100, 'notes':220}
-        anchors = {'date':tk.CENTER, 'type':tk.W, 'quality':tk.W, 'qty':tk.CENTER, 'unit':tk.E, 'total':tk.E, 'customer':tk.W, 'pay':tk.CENTER, 'user':tk.W, 'notes':tk.W}
+        widths = {
+            'date': 110, 'type': 60, 'quality': 80, 'qty': 60,
+            'unit': 110, 'total': 120, 'customer': 120, 'pay': 80, 'user': 120, 'notes': 320
+        }
+        anchors = {
+            'date': tk.CENTER, 'type': tk.W, 'quality': tk.W, 'qty': tk.CENTER,
+            'unit': tk.E, 'total': tk.E, 'customer': tk.W, 'pay': tk.CENTER, 'user': tk.W, 'notes': tk.W
+        }
 
         for c in columns:
             self.sales_tree.heading(c, text=headers[c])
-            self.sales_tree.column(c, width=widths[c], anchor=anchors[c])
+            self.sales_tree.column(c, width=widths[c], anchor=anchors[c], stretch=False)
 
-        ysb = ttk.Scrollbar(table_box, orient=tk.VERTICAL, command=self.sales_tree.yview)
-        xsb = ttk.Scrollbar(table_box, orient=tk.HORIZONTAL, command=self.sales_tree.xview)
-        self.sales_tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
-
-        self.sales_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        ysb.pack(side=tk.RIGHT, fill=tk.Y)
-        xsb.pack(fill=tk.X)
+        self.sales_tree.tag_configure('odd', background="#fafafa")     # zebra
 
         # ---- Totales ----
         totals_box = ttk.Frame(right)
-        totals_box.pack(fill=tk.X, pady=(6,0))
+        totals_box.pack(fill=tk.X, pady=(6, 0))
         self.totals_lbl = ttk.Label(totals_box, text="Totales: —", font=('Segoe UI', 9, 'bold'))
         self.totals_lbl.pack(anchor=tk.E)
 
@@ -249,7 +256,6 @@ class SalesView:
             self._set_stock_text(f"Stock seleccionado: ? ({e})")
 
     def _set_stock_text(self, text):
-        # crea si no existe (por si se llama antes de construir)
         if not hasattr(self, "stock_label"):
             self.stock_label = ttk.Label(self.parent)
         self.stock_label.config(text=text)
@@ -308,7 +314,7 @@ class SalesView:
             messagebox.showinfo("Venta", "Venta registrada correctamente.")
             self._refresh_stock_labels()
             self._reset_form()
-            self._load_sales() 
+            self._load_sales()  # refrescar historial
             try:
                 self.parent.event_generate("<<SaleCreated>>", when="tail")
             except Exception:
@@ -338,11 +344,11 @@ class SalesView:
             rows, totals = self.controller.get_sales_report(start, end, t, q)
 
             if not rows:
-                self.sales_tree.insert('', 'end', values=("— Sin ventas —","","","","","","","","",""))
+                self.sales_tree.insert('', 'end', values=("— Sin ventas —", "", "", "", "", "", "", "", "", ""))
                 self.totals_lbl.config(text="Totales: 0 bultos | $0.00")
                 return
 
-            for r in rows:
+            for idx, r in enumerate(rows):
                 pay = r.get('payment_method')
                 pay_disp = CODE_TO_PAY.get(pay, '—') if pay else '—'
                 self.sales_tree.insert(
@@ -358,10 +364,9 @@ class SalesView:
                         pay_disp,
                         r.get('username') or '',
                         r.get('notes') or ''
-                    )
+                    ),
+                    tags=('odd',) if idx % 2 else ()
                 )
-            self.sales_tree.tag_configure('entry', background='#eefeef')  # verde claro
-            self.sales_tree.tag_configure('exit',  background='#ffefef')  # rojo claro
 
             self.totals_lbl.config(
                 text=f"Totales: {int(totals['quantity'])} bultos | ${float(totals['amount']):.2f}"
@@ -376,7 +381,10 @@ class SalesView:
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet
         except ImportError:
-            messagebox.showerror("Falta dependencia", "Para generar PDF necesitas instalar reportlab:\n\npip install reportlab")
+            messagebox.showerror(
+                "Falta dependencia",
+                "Para generar PDF necesitas instalar reportlab:\n\npip install reportlab"
+            )
             return
 
         start, end, t, q = self._get_filters()
@@ -395,7 +403,7 @@ class SalesView:
             title="Guardar reporte como",
             defaultextension=".pdf",
             initialfile=default_name,
-            filetypes=[("PDF","*.pdf")]
+            filetypes=[("PDF", "*.pdf")]
         )
         if not path:
             return
@@ -414,7 +422,8 @@ class SalesView:
                 styles['Normal']
             )
 
-            table_data = [["Fecha","Tipo","Calidad","Bultos","Precio U.","Total","Cliente","Pago","Usuario","Notas"]]
+            table_data = [["Fecha", "Tipo", "Calidad", "Bultos",
+                           "Precio U.", "Total", "Cliente", "Pago", "Usuario", "Notas"]]
             for r in data:
                 pay = r.get('payment_method')
                 pay_disp = CODE_TO_PAY.get(pay, '—') if pay else '—'
@@ -431,7 +440,6 @@ class SalesView:
                     r.get('notes') or ''
                 ])
 
-            # Totales
             table_data.append([
                 "Totales", "", "", str(int(totals['quantity'])),
                 "", f"${float(totals['amount']):,.2f}", "", "", "", ""
@@ -439,15 +447,15 @@ class SalesView:
 
             tbl = Table(table_data, repeatRows=1)
             tbl.setStyle(TableStyle([
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f0f0f0')),
-                ('ALIGN', (3,1), (3,-2), 'CENTER'),  # Bultos
-                ('ALIGN', (4,1), (5,-2), 'RIGHT'),   # Precios
-                ('ALIGN', (7,1), (8,-2), 'CENTER'),  # Pago / Usuario
-                ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#cccccc')),
-                ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.white, colors.HexColor('#fbfbfb')]),
-                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#e8f5e9')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+                ('ALIGN', (3, 1), (3, -2), 'CENTER'),  # Bultos
+                ('ALIGN', (4, 1), (5, -2), 'RIGHT'),   # Precios
+                ('ALIGN', (7, 1), (8, -2), 'CENTER'),  # Pago / Usuario
+                ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cccccc')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#fbfbfb')]),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8f5e9')),
             ]))
 
             story = [title, Spacer(0, 8), meta, Spacer(0, 10), tbl]
@@ -455,7 +463,7 @@ class SalesView:
             def _footer(canvas, doc):
                 canvas.saveState()
                 canvas.setFont("Helvetica", 9)
-                canvas.drawRightString(doc.pagesize[0]-18, 12, f"Página {doc.page}")
+                canvas.drawRightString(doc.pagesize[0] - 18, 12, f"Página {doc.page}")
                 canvas.restoreState()
 
             doc.build(story, onFirstPage=_footer, onLaterPages=_footer)

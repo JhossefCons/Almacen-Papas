@@ -160,18 +160,17 @@ class MainWindow:
             view = ViewClass(parent_for_view, self.db, self.auth_manager, *extra_args)
             setattr(self, attr_name, view)
 
-        # Crea pestañas (solo las que existan en tu proyecto)
+        # Crea pestañas
         _add_tab("Módulo de Caja", CashRegisterView, "cash_view")
         if SalesView:
-            # si tienes módulo de ventas
             try:
                 from modules.cash_register.controller import CashRegisterController
                 self.cash_controller = CashRegisterController(self.db, self.auth_manager)
                 _add_tab("Ventas", SalesView, "sales_view", self.cash_controller)
             except Exception:
                 _add_tab("Ventas", SalesView, "sales_view")
-        _add_tab("Préstamos a Empleados", LoansView, "loans_view")
         _add_tab("Inventario de Papa", InventoryView, "inventory_view")
+        _add_tab("Préstamos a Empleados", LoansView, "loans_view")
         _add_tab("Empleados", EmployeesView, "employees_view")
         _add_tab("Nómina", PayrollReportView, "payroll_view")
 

@@ -114,6 +114,7 @@ class SalesController:
             "FROM potato_inventory pi",
             "LEFT JOIN users u ON u.id = pi.user_id",
             "WHERE pi.operation='exit'"
+            "  AND COALESCE(pi.supplier_customer,'') <> 'ajuste'"
         ]
         params: list = []
 
@@ -145,6 +146,7 @@ class SalesController:
         q = [
             "SELECT COALESCE(SUM(quantity),0) AS qty, COALESCE(SUM(total_value),0) AS total",
             "FROM potato_inventory WHERE operation='exit'"
+            "  AND COALESCE(supplier_customer,'') <> 'ajuste'"
         ]
         params: list = []
         if start_date:
