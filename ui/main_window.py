@@ -17,8 +17,8 @@ class MainWindow:
         self.root = tk.Tk()
         
         # Sistema de notificaciones
-        self.notification_system = NotificationSystem(database)
         self.notification_center = NotificationCenter(self.root)
+        self.notification_system = NotificationSystem(database, self.notification_center)
         
         # Sistema de ayuda
         self.help_system = HelpSystem(self.root)
@@ -369,7 +369,9 @@ class MainWindow:
         PapaSoft - Sistema de Gestión Integral
         
         Versión: 1.0.0
-        Desarrollado por: Tu Empresa
+        Desarrollado por: JHOSSEF NICOLAS CONSTAIN NIEVES
+        Numero: 3233585649
+        Correo: niconstain@gmail.com
         
         Características:
         • Gestión de Caja
@@ -378,8 +380,6 @@ class MainWindow:
         • Ventas
         • Reportes y Gráficos
         • Sistema de Notificaciones
-        
-        © 2024 Tu Empresa. Todos los derechos reservados.
         """
         
         messagebox.showinfo("Acerca de PapaSoft", about_text)

@@ -8,8 +8,9 @@ import tkinter as tk
 from tkinter import ttk
 
 class NotificationSystem:
-    def __init__(self, database, check_interval=300):  # 5 minutos por defecto
+    def __init__(self, database, notification_center=None, check_interval=300):  # 5 minutos por defecto
         self.db = database
+        self.notification_center = notification_center
         self.check_interval = check_interval
         self.running = False
         self.thread = None
@@ -77,13 +78,13 @@ class NotificationSystem:
         """Verificar stock bajo"""
         try:
             query = """
-                SELECT 
+                SELECT
                     potato_type,
                     quality,
                     SUM(CASE WHEN operation = 'entry' THEN quantity ELSE -quantity END) as current_stock
                 FROM potato_inventory
                 GROUP BY potato_type, quality
-                HAVING current_stock > 0 AND current_stock <= 20  # Umbral de 20 costales
+                HAVING current_stock > 0 AND current_stock <= 20  -- Umbral de 20 costales
             """
             
             results = self.db.execute_query(query)
@@ -141,11 +142,11 @@ class NotificationSystem:
         try:
             # En un entorno real, podrías usar un sistema de notificaciones más sofisticado
             print(f"NOTIFICACIÓN: {title} - {message}")
-            
-            # Para mostrar en la interfaz, necesitaríamos una referencia a la ventana principal
-            # Por ahora usamos messagebox como ejemplo
-            # messagebox.showinfo(title, message)
-            
+
+            # Agregar a la interfaz de usuario si hay un centro de notificaciones disponible
+            if self.notification_center:
+                self.notification_center.add_notification(title, message, "info")
+
         except Exception as e:
             print(f"Error mostrando notificación: {e}")
 
