@@ -29,15 +29,17 @@ class PapaSoftApp:
         # Verificar si hay que crear usuario admin por primera vez
         if not self.auth_manager.has_admin_user():
             self.auth_manager.create_default_admin()
-            
-        # Mostrar ventana de login
-        if self.auth_manager.show_login():
-            # Si el login es exitoso, mostrar ventana principal
-            self.main_window = MainWindow(self.db, self.auth_manager)
-            self.main_window.run()
-        else:
-            # Si el login falla, salir
-            sys.exit(0)
+
+        while True:
+            # Mostrar ventana de login
+            if self.auth_manager.show_login():
+                # Si el login es exitoso, mostrar ventana principal
+                self.main_window = MainWindow(self.db, self.auth_manager)
+                self.main_window.run()
+            else:
+                # Si el login falla, salir
+                break
+        sys.exit(0)
 
 if __name__ == "__main__":
     app = PapaSoftApp()

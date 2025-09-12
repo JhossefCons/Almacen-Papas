@@ -314,7 +314,6 @@ def build_installer():
             ("papasoft.db", "papasoft.db")
         ],
         "optimize": 2,
-        "compressed": True,
         "include_msvcr": True  # Incluir runtime de VC++ en Windows
     }
 
@@ -416,11 +415,5 @@ if __name__ == "__main__":
                     print(f"✓ Limpiado: {dir_name}")
         else:
             print("Uso: python setup.py [build|portable|clean]")
-    else:
-        setup_application()
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "build":
-        build_installer()
     else:
         setup_application()

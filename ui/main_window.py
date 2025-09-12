@@ -15,14 +15,14 @@ class MainWindow:
         self.db = database
         self.auth_manager = auth_manager
         self.root = tk.Tk()
-        
+
         # Sistema de notificaciones
         self.notification_center = NotificationCenter(self.root)
         self.notification_system = NotificationSystem(database, self.notification_center)
-        
+
         # Sistema de ayuda
         self.help_system = HelpSystem(self.root)
-        
+
         self.setup_window()
         
     def setup_window(self):
