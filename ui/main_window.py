@@ -6,22 +6,37 @@ from tkinter import ttk
 from datetime import datetime
 import threading
 from tkinter import messagebox
+import sys
 from utils.notifications import NotificationSystem, NotificationCenter
 from utils.scrollframe import ScrollFrame
-from help.help_system import HelpSystem, QuickHelp
+from PIL import Image, ImageTk
+
 
 class MainWindow:
     def __init__(self, database, auth_manager):
         self.db = database
         self.auth_manager = auth_manager
         self.root = tk.Tk()
+        
+        # 👉 Agregar icono a la ventana
+        try:
+            icon_image = Image.open("assets/icons/iconoPapa.png")
+            # Redimensionar manteniendo proporción
+            w, h = icon_image.size
+            max_size = 64  # tamaño máximo recomendado para íconos
+            scale = min(max_size / w, max_size / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            icon_image = icon_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            self.icon_photo = ImageTk.PhotoImage(icon_image)
+            self.root.iconphoto(False, self.icon_photo)
+        except Exception as e:
+            print(f"No se pudo cargar el icono de la ventana: {e}")
 
         # Sistema de notificaciones
         self.notification_center = NotificationCenter(self.root)
         self.notification_system = NotificationSystem(database, self.notification_center)
 
-        # Sistema de ayuda
-        self.help_system = HelpSystem(self.root)
+
 
         self.setup_window()
         
@@ -33,7 +48,7 @@ class MainWindow:
         
         # Configurar icono (si existe)
         try:
-            self.root.iconbitmap("assets/icon.ico")
+            self.root.iconbitmap("assets/iconoPapa.ico")
         except:
             pass
         
@@ -86,13 +101,8 @@ class MainWindow:
             admin_menu.add_command(label="Backup Base de Datos", command=self.backup_database)
             admin_menu.add_command(label="Restaurar Backup", command=self.restore_backup)
         
-        # Menú Ayuda
-        help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Ayuda", menu=help_menu)
-        help_menu.add_command(label="Contenido de Ayuda", command=lambda: self.help_system.show_help())
-        help_menu.add_command(label="Manual de Usuario", command=lambda: self.help_system.show_help('manual'))
-        help_menu.add_separator()
-        help_menu.add_command(label="Acerca de PapaSoft", command=self.show_about)
+        # Acerca de
+        menubar.add_command(label="Acerca de PapaSoft", command=self.show_about)
     
     def setup_toolbar(self):
         """Configurar la barra de herramientas"""
@@ -105,16 +115,6 @@ class MainWindow:
         
         # Separador
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-        
-        # Botones de ayuda contextual
-        ttk.Button(toolbar, text="Ayuda Caja", 
-                  command=lambda: self.help_system.show_help('caja')).pack(side=tk.LEFT, padx=2, pady=2)
-        ttk.Button(toolbar, text="Ayuda Préstamos", 
-                  command=lambda: self.help_system.show_help('prestamos')).pack(side=tk.LEFT, padx=2, pady=2)
-        ttk.Button(toolbar, text="Ayuda Inventario", 
-                  command=lambda: self.help_system.show_help('inventario')).pack(side=tk.LEFT, padx=2, pady=2)
-        ttk.Button(toolbar, text="Ayuda Ventas", 
-                  command=lambda: self.help_system.show_help('ventas')).pack(side=tk.LEFT, padx=2, pady=2)
     
     def setup_notebook(self):
         """Configurar el notebook con pestañas para cada módulo (con scroll)."""
@@ -389,12 +389,12 @@ class MainWindow:
         if messagebox.askokcancel("Salir", "¿Está seguro de que desea salir de PapaSoft?"):
             # Detener sistema de notificaciones
             self.notification_system.stop()
-            
+
             # Cerrar base de datos
             if hasattr(self.db, 'close'):
                 self.db.close()
-            
-            self.root.quit()
+
+            sys.exit(0)
     
     def logout(self):
         """Cerrar sesión y volver a la ventana de login"""

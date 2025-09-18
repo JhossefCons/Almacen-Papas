@@ -3,6 +3,7 @@ Ventana de login para la aplicación
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
+from PIL import Image, ImageTk
 
 class LoginWindow:
     def __init__(self, auth_manager):
@@ -13,8 +14,22 @@ class LoginWindow:
         self.root.title("PapaSoft - Inicio de Sesión")
         self.root.geometry("400x300")
         self.root.resizable(False, False)
-        self.center_window()
         
+        # 👉 Agregar icono a la ventana
+        try:
+            icon_image = Image.open("assets/icons/iconoPapa.png")
+            # Redimensionar manteniendo proporción
+            w, h = icon_image.size
+            max_size = 64  # tamaño máximo recomendado para íconos
+            scale = min(max_size / w, max_size / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            icon_image = icon_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            self.icon_photo = ImageTk.PhotoImage(icon_image)
+            self.root.iconphoto(False, self.icon_photo)
+        except Exception as e:
+            print(f"No se pudo cargar el icono de la ventana: {e}")
+        
+        self.center_window()
         self.setup_ui()
         self.root.mainloop()
         
@@ -28,14 +43,21 @@ class LoginWindow:
         self.root.geometry('{}x{}+{}+{}'.format(width, height, x, y))
         
     def setup_ui(self):
-        """Configurar la interfaz de usuario de login"""
+        
         # Marco principal
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Título con icono
+        title_frame = ttk.Frame(main_frame)
+        title_frame.grid(row=0, column=0, columnspan=2, pady=20)
         
-        # Título
-        title_label = ttk.Label(main_frame, text="PapaSoft", font=("Arial", 24, "bold"))
-        title_label.grid(row=0, column=0, columnspan=2, pady=20)
+        # 👉 Usa la misma imagen cargada en __init__: self.icon_photo
+        icon_label = ttk.Label(title_frame, image=self.icon_photo)
+        icon_label.pack(side=tk.LEFT, padx=(0, 10))
+
+        title_label = ttk.Label(title_frame, text="PapaSoft", font=("Arial", 24, "bold"))
+        title_label.pack(side=tk.LEFT)
         
         # Campos de formulario
         ttk.Label(main_frame, text="Usuario:").grid(row=1, column=0, sticky=tk.W, pady=5)
