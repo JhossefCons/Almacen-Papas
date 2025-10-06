@@ -484,6 +484,7 @@ class SalesView:
 
     # públicos (para refresco general desde MainWindow)
     def refresh_all(self):
+        self._load_product_options()
         self._auto_fill_price()
         self._refresh_stock_labels()
         self._load_sales()

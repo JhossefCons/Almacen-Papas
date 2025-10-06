@@ -204,6 +204,12 @@ class LoansView:
 
         ttk.Button(alerts, text="Actualizar Alertas", command=self.update_alerts).pack(pady=4)
 
+    # públicos (lo llama MainWindow al cambiar de pestaña/F5)
+    def refresh_all(self):
+        self.load_loans()
+        self.load_employees()
+        self.update_alerts()
+
     # -----------------------------
     # EMPLEADOS
     # -----------------------------

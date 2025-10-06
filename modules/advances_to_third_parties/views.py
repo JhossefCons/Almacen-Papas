@@ -308,5 +308,6 @@ class AdvancesToThirdPartiesView:
             messagebox.showerror("Error", f"No se pudo cargar pagos: {e}")
 
     def refresh_all(self):
+        self._load_product_options()
         self._load_credit_sales()
         self._load_payments()

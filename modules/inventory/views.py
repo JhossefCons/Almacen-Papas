@@ -321,6 +321,7 @@ class InventoryView:
     # Públicos para refrescar desde fuera
     # ------------------------------
     def refresh_all(self):
+        self._load_product_options()
         self.refresh_stock_table()
         self.refresh_valuation_table()
         self.refresh_sacks_label()

@@ -243,6 +243,9 @@ class MainWindow:
             elif "nómina" in tab_text or "nomina" in tab_text:
                 if hasattr(self, "payroll_view"):
                     self._refresh_view_safely(self.payroll_view)
+            elif "anticipos" in tab_text.lower() or "terceros" in tab_text.lower():
+                if hasattr(self, "advances_view"):
+                    self._refresh_view_safely(self.advances_view)
             else:
                 # Si no reconoce la pestaña, como fallback refresca todo
                 self.refresh_all()
