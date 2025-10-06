@@ -146,6 +146,10 @@ class MainWindow:
             from modules.payroll.views import PayrollReportView
         except Exception:
             PayrollReportView = None
+        try:
+            from modules.advances_to_third_parties.views import AdvancesToThirdPartiesView
+        except Exception:
+            AdvancesToThirdPartiesView = None
 
         # Helper para crear pestañas con scroll y montar la vista
         def _add_tab(title, ViewClass, attr_name, *extra_args):
@@ -173,6 +177,7 @@ class MainWindow:
         _add_tab("Préstamos a Empleados", LoansView, "loans_view")
         _add_tab("Empleados", EmployeesView, "employees_view")
         _add_tab("Nómina", PayrollReportView, "payroll_view")
+        _add_tab("Anticipos a Terceros", AdvancesToThirdPartiesView, "advances_view")
 
         # refresco al cambiar de pestaña (si ya tienes uno, mantén el tuyo)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)

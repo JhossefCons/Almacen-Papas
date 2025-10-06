@@ -132,3 +132,61 @@ class PotatoInventory:
             user_id=row['user_id'],
             created_at=row['created_at']
         )
+
+
+
+class CreditSale:
+    def __init__(self, id, date, customer_name, product_name, quantity, unit_price, quality, total_amount, status, notes, user_id, created_at=None):
+        self.id = id
+        self.date = date
+        self.customer_name = customer_name
+        self.product_name = product_name
+        self.quantity = quantity
+        self.unit_price = unit_price
+        self.quality = quality
+        self.total_amount = total_amount
+        self.status = status
+        self.notes = notes
+        self.user_id = user_id
+        self.created_at = created_at or datetime.now().isoformat()
+
+    @classmethod
+    def from_db_row(cls, row):
+        return cls(
+            id=row['id'],
+            date=row['date'],
+            customer_name=row['customer_name'],
+            product_name=row['product_name'],
+            quantity=row['quantity'],
+            unit_price=row['unit_price'],
+            quality=row['quality'],
+            total_amount=row['total_amount'],
+            status=row['status'],
+            notes=row['notes'],
+            user_id=row['user_id'],
+            created_at=row['created_at']
+        )
+
+class CreditSalePayment:
+    def __init__(self, id, credit_sale_id, payment_date, amount, payment_method, notes, user_id, created_at=None):
+        self.id = id
+        self.credit_sale_id = credit_sale_id
+        self.payment_date = payment_date
+        self.amount = amount
+        self.payment_method = payment_method
+        self.notes = notes
+        self.user_id = user_id
+        self.created_at = created_at or datetime.now().isoformat()
+
+    @classmethod
+    def from_db_row(cls, row):
+        return cls(
+            id=row['id'],
+            credit_sale_id=row['credit_sale_id'],
+            payment_date=row['payment_date'],
+            amount=row['amount'],
+            payment_method=row['payment_method'],
+            notes=row['notes'],
+            user_id=row['user_id'],
+            created_at=row['created_at']
+        )

@@ -59,11 +59,21 @@ class InventoryView:
         self.date_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        ttk.Label(left, text="Tipo de papa:").grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.type_cb = ttk.Combobox(left, state="readonly", values=tuple(VALID_COMBOS.keys()), width=18)
-        self.type_cb.set("parda")
+        ttk.Label(left, text="Producto:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        self.type_cb = ttk.Combobox(left, state="readonly", width=18)
+        self._load_product_options()
         self.type_cb.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         self.type_cb.bind("<<ComboboxSelected>>", self._on_combo_change)
+        row += 1
+
+        # Custom product entry (hidden initially)
+        self.custom_product_label = ttk.Label(left, text="Nombre del producto:")
+        self.custom_product_entry = ttk.Entry(left)
+        self.custom_product_label.grid(row=row, column=0, sticky=tk.W, pady=2)
+        self.custom_product_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+        # Initially hide
+        self.custom_product_label.grid_remove()
+        self.custom_product_entry.grid_remove()
         row += 1
 
         ttk.Label(left, text="Calidad:").grid(row=row, column=0, sticky=tk.W, pady=2)
@@ -180,7 +190,7 @@ class InventoryView:
         stock_frame.grid_rowconfigure(0, weight=1)
         stock_frame.grid_columnconfigure(0, weight=1)
 
-        self.stock_tree.heading("potato_type", text="Tipo")
+        self.stock_tree.heading("potato_type", text="Producto")
         self.stock_tree.heading("quality", text="Calidad")
         self.stock_tree.heading("price", text="Precio ref.")
         self.stock_tree.heading("stock", text="Bultos disponibles")
@@ -225,7 +235,7 @@ class InventoryView:
         val_frame.grid_columnconfigure(0, weight=1)
 
         headers = {
-            "potato_type": "Tipo",
+            "potato_type": "Producto",
             "quality": "Calidad",
             "stock": "Bultos",
             "avg_cost": "Costo compra",
@@ -253,12 +263,43 @@ class InventoryView:
     # ------------------------------
     # Helpers
     # ------------------------------
+    def _load_product_options(self):
+        try:
+            # Always include predefined potatoes
+            products = ["parda", "colorada", "amarilla"]
+            # Add custom products from DB
+            rows = self.db.execute_query("SELECT DISTINCT potato_type FROM potato_inventory WHERE potato_type NOT IN ('parda', 'colorada', 'amarilla') ORDER BY potato_type")
+            custom_products = [r['potato_type'] for r in rows] if rows else []
+            products.extend(custom_products)
+            # Add "Otro producto"
+            products.append("Otro producto")
+            self.type_cb["values"] = tuple(products)
+            self.type_cb.set(products[0])
+        except Exception as e:
+            self.type_cb["values"] = ("parda", "colorada", "amarilla", "Otro producto")
+            self.type_cb.set("parda")
+            print(f"Error loading products: {e}")
+
     def _reload_quality_options(self, potato_type: str):
         values = VALID_COMBOS.get(potato_type.lower(), [])
         self.quality_cb["values"] = tuple(values)
         self.quality_cb.set(values[0] if values else "")
 
     def _on_combo_change(self, _evt=None):
+        selected = self.type_cb.get().strip()
+        if selected == "Otro producto":
+            self.custom_product_label.grid()
+            self.custom_product_entry.grid()
+            self.custom_product_entry.focus()
+            # For custom, make quality editable
+            self.quality_cb.config(state="normal")
+            self.quality_cb.set("")
+        else:
+            self.custom_product_label.grid_remove()
+            self.custom_product_entry.grid_remove()
+            self.custom_product_entry.delete(0, tk.END)
+            # Reload quality options
+            self._reload_quality_options(selected)
         self._auto_fill_prices()
 
     def _auto_fill_prices(self):
@@ -357,12 +398,19 @@ class InventoryView:
         self.notes_entry.delete(0, tk.END)
         self.payment_method.set("Efectivo")
         self.add_to_cash.set(False)
+        self.custom_product_entry.delete(0, tk.END)
         self._auto_fill_prices()
 
     def add_entry(self):
         try:
             date = self.date_entry.get_date().strftime("%Y-%m-%d")
-            t = self.type_cb.get().strip().lower()
+            selected = self.type_cb.get().strip()
+            if selected == "Otro producto":
+                t = self.custom_product_entry.get().strip().lower()
+                if not t:
+                    raise ValueError("Ingrese el nombre del producto personalizado.")
+            else:
+                t = selected.lower()
             q = self.quality_cb.get().strip().lower()
 
             qty = int((self.qty_entry.get() or "").strip())
