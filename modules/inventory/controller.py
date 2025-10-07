@@ -471,3 +471,29 @@ class InventoryController:
              LIMIT 1
         """, (potato_type, quality))
         return float(rows[0]["unit_price"]) if rows else None
+
+    def rename_product(self, old_type: str, quality: str, new_type: str):
+        """Rename a custom product type."""
+        old_type = old_type.lower().strip()
+        new_type = new_type.lower().strip()
+        quality = quality.lower().strip()
+        if old_type == new_type:
+            return
+        # Update potato_inventory
+        self.db.execute_query(
+            "UPDATE potato_inventory SET potato_type=? WHERE potato_type=? AND quality=?",
+            (new_type, old_type, quality)
+        )
+        # Update inventory_prices
+        self.db.execute_query(
+            "UPDATE inventory_prices SET potato_type=? WHERE potato_type=? AND quality=?",
+            (new_type, old_type, quality)
+        )
+
+    def delete_product(self, potato_type: str):
+        """Delete all records for a custom product type."""
+        potato_type = potato_type.lower().strip()
+        # Delete from potato_inventory
+        self.db.execute_query("DELETE FROM potato_inventory WHERE potato_type=?", (potato_type,))
+        # Delete from inventory_prices
+        self.db.execute_query("DELETE FROM inventory_prices WHERE potato_type=?", (potato_type,))

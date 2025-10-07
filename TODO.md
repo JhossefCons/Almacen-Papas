@@ -1,10 +1,7 @@
-# Fix Combobox Refresh Issue
+# Custom Product Enhancements
 
 ## Tasks
-- [x] Modify sales/views.py: add _load_product_options() to refresh_all
-- [x] Modify payroll/views.py: add _load_employees_combo() to refresh_all
-- [x] Modify loans/views.py: add refresh_all method with load_loans, load_employees, update_alerts
-- [x] Modify advances_to_third_parties/views.py: add _load_product_options() to refresh_all
-- [x] Modify inventory/views.py: add _load_product_options() to refresh_all
-- [x] Modify main_window.py: add case for advances in _on_tab_changed
-- [ ] Test the changes
+- [x] Modify inventory/views.py: when "Otro producto" selected, show predefined qualities in quality combobox
+- [x] Modify inventory/views.py: in edit dialog, allow editing name for custom products
+- [x] Modify inventory/views.py: add delete option for custom products in edit dialog
+- [x] Test the changes

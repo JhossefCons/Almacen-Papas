@@ -291,9 +291,10 @@ class InventoryView:
             self.custom_product_label.grid()
             self.custom_product_entry.grid()
             self.custom_product_entry.focus()
-            # For custom, make quality editable
-            self.quality_cb.config(state="normal")
-            self.quality_cb.set("")
+            # For custom, show predefined qualities
+            self.quality_cb.config(state="readonly")
+            self.quality_cb["values"] = tuple(VALID_COMBOS["parda"])  # Use predefined qualities
+            self.quality_cb.set(VALID_COMBOS["parda"][0])  # Set to first quality
         else:
             self.custom_product_label.grid_remove()
             self.custom_product_entry.grid_remove()
@@ -322,6 +323,7 @@ class InventoryView:
     # ------------------------------
     def refresh_all(self):
         self._load_product_options()
+        self._on_combo_change()  # Ensure quality is set after loading products
         self.refresh_stock_table()
         self.refresh_valuation_table()
         self.refresh_sacks_label()
@@ -525,38 +527,51 @@ class InventoryView:
         vals = self.stock_tree.item(sel[0], "values")
         potato_type, quality, price_str, stock = vals[0], vals[1], vals[2], int(vals[3])
 
+        is_custom = potato_type.lower() not in VALID_COMBOS
+
         dlg = tk.Toplevel(self.parent)
         dlg.title(f"Editar {potato_type} - {quality}")
-        dlg.geometry("360x230")
+        dlg.geometry("400x280" if is_custom else "360x230")
         dlg.transient(self.parent)
         dlg.grab_set()
 
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(frm, text="Tipo:").grid(row=0, column=0, sticky=tk.W, pady=4)
-        ttk.Label(frm, text=potato_type).grid(row=0, column=1, sticky=tk.W, pady=4)
+        row = 0
+        ttk.Label(frm, text="Tipo:").grid(row=row, column=0, sticky=tk.W, pady=4)
+        if is_custom:
+            type_entry = ttk.Entry(frm, width=18)
+            type_entry.insert(0, potato_type)
+            type_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
+        else:
+            ttk.Label(frm, text=potato_type).grid(row=row, column=1, sticky=tk.W, pady=4)
+        row += 1
 
-        ttk.Label(frm, text="Calidad:").grid(row=1, column=0, sticky=tk.W, pady=4)
-        ttk.Label(frm, text=quality).grid(row=1, column=1, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Calidad:").grid(row=row, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text=quality).grid(row=row, column=1, sticky=tk.W, pady=4)
+        row += 1
 
-        ttk.Label(frm, text="Precio ref. (venta):").grid(row=2, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Precio ref. (venta):").grid(row=row, column=0, sticky=tk.W, pady=4)
         price_entry = ttk.Entry(frm, width=18)
         price_entry.insert(0, price_str)
-        price_entry.grid(row=2, column=1, sticky=tk.EW, pady=4)
+        price_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
+        row += 1
 
-        ttk.Label(frm, text="Bultos (stock):").grid(row=3, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Bultos (stock):").grid(row=row, column=0, sticky=tk.W, pady=4)
         stock_entry = ttk.Entry(frm, width=18)
         stock_entry.insert(0, str(stock))
-        stock_entry.grid(row=3, column=1, sticky=tk.EW, pady=4)
+        stock_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
+        row += 1
 
         note_var = tk.StringVar()
-        ttk.Label(frm, text="Nota (opcional):").grid(row=4, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Nota (opcional):").grid(row=row, column=0, sticky=tk.W, pady=4)
         note_entry = ttk.Entry(frm, textvariable=note_var)
-        note_entry.grid(row=4, column=1, sticky=tk.EW, pady=4)
+        note_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
+        row += 1
 
         btns = ttk.Frame(frm)
-        btns.grid(row=5, column=0, columnspan=2, pady=(10, 0))
+        btns.grid(row=row, column=0, columnspan=2, pady=(10, 0))
 
         def save_changes():
             try:
@@ -564,6 +579,14 @@ class InventoryView:
                 new_stock = int(stock_entry.get())
                 if new_price < 0 or new_stock < 0:
                     raise ValueError("Precio y stock deben ser ≥ 0.")
+
+                if is_custom and type_entry.get().strip().lower() != potato_type.lower():
+                    new_type = type_entry.get().strip().lower()
+                    if not new_type:
+                        raise ValueError("Nombre del producto no puede estar vacío.")
+                    # Rename product
+                    self.controller.rename_product(potato_type, quality, new_type)
+                    potato_type = new_type
 
                 self.controller.set_reference_price(potato_type, quality, new_price)
                 if new_stock != stock:
@@ -577,7 +600,19 @@ class InventoryView:
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
+        def delete_product():
+            if messagebox.askyesno("Eliminar Producto", f"¿Eliminar el producto '{potato_type}' completamente? Se perderán todos los registros."):
+                try:
+                    self.controller.delete_product(potato_type)
+                    dlg.destroy()
+                    self.refresh_all()
+                    messagebox.showinfo("Inventario", "Producto eliminado.")
+                except Exception as e:
+                    messagebox.showerror("Error", str(e))
+
         ttk.Button(btns, text="Guardar", command=save_changes).pack(side=tk.LEFT, padx=6)
+        if is_custom:
+            ttk.Button(btns, text="Eliminar Producto", command=delete_product).pack(side=tk.LEFT, padx=6)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         frm.columnconfigure(1, weight=1)
 
