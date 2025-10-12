@@ -59,21 +59,11 @@ class InventoryView:
         self.date_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        ttk.Label(left, text="Producto:").grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.type_cb = ttk.Combobox(left, state="readonly", width=18)
-        self._load_product_options()
+        ttk.Label(left, text="Tipo de papa:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        self.type_cb = ttk.Combobox(left, state="readonly", values=tuple(VALID_COMBOS.keys()), width=18)
+        self.type_cb.set("parda")
         self.type_cb.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         self.type_cb.bind("<<ComboboxSelected>>", self._on_combo_change)
-        row += 1
-
-        # Custom product entry (hidden initially)
-        self.custom_product_label = ttk.Label(left, text="Nombre del producto:")
-        self.custom_product_entry = ttk.Entry(left)
-        self.custom_product_label.grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.custom_product_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        # Initially hide
-        self.custom_product_label.grid_remove()
-        self.custom_product_entry.grid_remove()
         row += 1
 
         ttk.Label(left, text="Calidad:").grid(row=row, column=0, sticky=tk.W, pady=2)
@@ -190,7 +180,7 @@ class InventoryView:
         stock_frame.grid_rowconfigure(0, weight=1)
         stock_frame.grid_columnconfigure(0, weight=1)
 
-        self.stock_tree.heading("potato_type", text="Producto")
+        self.stock_tree.heading("potato_type", text="Tipo")
         self.stock_tree.heading("quality", text="Calidad")
         self.stock_tree.heading("price", text="Precio ref.")
         self.stock_tree.heading("stock", text="Bultos disponibles")
@@ -235,7 +225,7 @@ class InventoryView:
         val_frame.grid_columnconfigure(0, weight=1)
 
         headers = {
-            "potato_type": "Producto",
+            "potato_type": "Tipo",
             "quality": "Calidad",
             "stock": "Bultos",
             "avg_cost": "Costo compra",
@@ -263,44 +253,12 @@ class InventoryView:
     # ------------------------------
     # Helpers
     # ------------------------------
-    def _load_product_options(self):
-        try:
-            # Always include predefined potatoes
-            products = ["parda", "colorada", "amarilla"]
-            # Add custom products from DB
-            rows = self.db.execute_query("SELECT DISTINCT potato_type FROM potato_inventory WHERE potato_type NOT IN ('parda', 'colorada', 'amarilla') ORDER BY potato_type")
-            custom_products = [r['potato_type'] for r in rows] if rows else []
-            products.extend(custom_products)
-            # Add "Otro producto"
-            products.append("Otro producto")
-            self.type_cb["values"] = tuple(products)
-            self.type_cb.set(products[0])
-        except Exception as e:
-            self.type_cb["values"] = ("parda", "colorada", "amarilla", "Otro producto")
-            self.type_cb.set("parda")
-            print(f"Error loading products: {e}")
-
     def _reload_quality_options(self, potato_type: str):
         values = VALID_COMBOS.get(potato_type.lower(), [])
         self.quality_cb["values"] = tuple(values)
         self.quality_cb.set(values[0] if values else "")
 
     def _on_combo_change(self, _evt=None):
-        selected = self.type_cb.get().strip()
-        if selected == "Otro producto":
-            self.custom_product_label.grid()
-            self.custom_product_entry.grid()
-            self.custom_product_entry.focus()
-            # For custom, show predefined qualities
-            self.quality_cb.config(state="readonly")
-            self.quality_cb["values"] = tuple(VALID_COMBOS["parda"])  # Use predefined qualities
-            self.quality_cb.set(VALID_COMBOS["parda"][0])  # Set to first quality
-        else:
-            self.custom_product_label.grid_remove()
-            self.custom_product_entry.grid_remove()
-            self.custom_product_entry.delete(0, tk.END)
-            # Reload quality options
-            self._reload_quality_options(selected)
         self._auto_fill_prices()
 
     def _auto_fill_prices(self):
@@ -322,8 +280,6 @@ class InventoryView:
     # Públicos para refrescar desde fuera
     # ------------------------------
     def refresh_all(self):
-        self._load_product_options()
-        self._on_combo_change()  # Ensure quality is set after loading products
         self.refresh_stock_table()
         self.refresh_valuation_table()
         self.refresh_sacks_label()
@@ -401,19 +357,12 @@ class InventoryView:
         self.notes_entry.delete(0, tk.END)
         self.payment_method.set("Efectivo")
         self.add_to_cash.set(False)
-        self.custom_product_entry.delete(0, tk.END)
         self._auto_fill_prices()
 
     def add_entry(self):
         try:
             date = self.date_entry.get_date().strftime("%Y-%m-%d")
-            selected = self.type_cb.get().strip()
-            if selected == "Otro producto":
-                t = self.custom_product_entry.get().strip().lower()
-                if not t:
-                    raise ValueError("Ingrese el nombre del producto personalizado.")
-            else:
-                t = selected.lower()
+            t = self.type_cb.get().strip().lower()
             q = self.quality_cb.get().strip().lower()
 
             qty = int((self.qty_entry.get() or "").strip())
@@ -527,51 +476,38 @@ class InventoryView:
         vals = self.stock_tree.item(sel[0], "values")
         potato_type, quality, price_str, stock = vals[0], vals[1], vals[2], int(vals[3])
 
-        is_custom = potato_type.lower() not in VALID_COMBOS
-
         dlg = tk.Toplevel(self.parent)
         dlg.title(f"Editar {potato_type} - {quality}")
-        dlg.geometry("400x280" if is_custom else "360x230")
+        dlg.geometry("360x230")
         dlg.transient(self.parent)
         dlg.grab_set()
 
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
-        ttk.Label(frm, text="Tipo:").grid(row=row, column=0, sticky=tk.W, pady=4)
-        if is_custom:
-            type_entry = ttk.Entry(frm, width=18)
-            type_entry.insert(0, potato_type)
-            type_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
-        else:
-            ttk.Label(frm, text=potato_type).grid(row=row, column=1, sticky=tk.W, pady=4)
-        row += 1
+        ttk.Label(frm, text="Tipo:").grid(row=0, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text=potato_type).grid(row=0, column=1, sticky=tk.W, pady=4)
 
-        ttk.Label(frm, text="Calidad:").grid(row=row, column=0, sticky=tk.W, pady=4)
-        ttk.Label(frm, text=quality).grid(row=row, column=1, sticky=tk.W, pady=4)
-        row += 1
+        ttk.Label(frm, text="Calidad:").grid(row=1, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text=quality).grid(row=1, column=1, sticky=tk.W, pady=4)
 
-        ttk.Label(frm, text="Precio ref. (venta):").grid(row=row, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Precio ref. (venta):").grid(row=2, column=0, sticky=tk.W, pady=4)
         price_entry = ttk.Entry(frm, width=18)
         price_entry.insert(0, price_str)
-        price_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
-        row += 1
+        price_entry.grid(row=2, column=1, sticky=tk.EW, pady=4)
 
-        ttk.Label(frm, text="Bultos (stock):").grid(row=row, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Bultos (stock):").grid(row=3, column=0, sticky=tk.W, pady=4)
         stock_entry = ttk.Entry(frm, width=18)
         stock_entry.insert(0, str(stock))
-        stock_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
-        row += 1
+        stock_entry.grid(row=3, column=1, sticky=tk.EW, pady=4)
 
         note_var = tk.StringVar()
-        ttk.Label(frm, text="Nota (opcional):").grid(row=row, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frm, text="Nota (opcional):").grid(row=4, column=0, sticky=tk.W, pady=4)
         note_entry = ttk.Entry(frm, textvariable=note_var)
-        note_entry.grid(row=row, column=1, sticky=tk.EW, pady=4)
-        row += 1
+        note_entry.grid(row=4, column=1, sticky=tk.EW, pady=4)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=row, column=0, columnspan=2, pady=(10, 0))
+        btns.grid(row=5, column=0, columnspan=2, pady=(10, 0))
 
         def save_changes():
             try:
@@ -579,14 +515,6 @@ class InventoryView:
                 new_stock = int(stock_entry.get())
                 if new_price < 0 or new_stock < 0:
                     raise ValueError("Precio y stock deben ser ≥ 0.")
-
-                if is_custom and type_entry.get().strip().lower() != potato_type.lower():
-                    new_type = type_entry.get().strip().lower()
-                    if not new_type:
-                        raise ValueError("Nombre del producto no puede estar vacío.")
-                    # Rename product
-                    self.controller.rename_product(potato_type, quality, new_type)
-                    potato_type = new_type
 
                 self.controller.set_reference_price(potato_type, quality, new_price)
                 if new_stock != stock:
@@ -600,19 +528,7 @@ class InventoryView:
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
-        def delete_product():
-            if messagebox.askyesno("Eliminar Producto", f"¿Eliminar el producto '{potato_type}' completamente? Se perderán todos los registros."):
-                try:
-                    self.controller.delete_product(potato_type)
-                    dlg.destroy()
-                    self.refresh_all()
-                    messagebox.showinfo("Inventario", "Producto eliminado.")
-                except Exception as e:
-                    messagebox.showerror("Error", str(e))
-
         ttk.Button(btns, text="Guardar", command=save_changes).pack(side=tk.LEFT, padx=6)
-        if is_custom:
-            ttk.Button(btns, text="Eliminar Producto", command=delete_product).pack(side=tk.LEFT, padx=6)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         frm.columnconfigure(1, weight=1)
 

@@ -134,39 +134,6 @@ class Database:
                 "INSERT INTO packaging_stock (id, sacks_count, sack_price, updated_at) VALUES (1, 0, 0, CURRENT_TIMESTAMP)"
             )
 
-
-
-        # Tabla de ventas a crédito
-        cursor.execute('''CREATE TABLE IF NOT EXISTS credit_sales (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            customer_name TEXT NOT NULL,
-            product_name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            unit_price REAL NOT NULL,
-            quality TEXT NOT NULL,
-            total_amount REAL NOT NULL,
-            status TEXT DEFAULT 'active',
-            notes TEXT,
-            user_id INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )''')
-
-        # Tabla de pagos de ventas a crédito
-        cursor.execute('''CREATE TABLE IF NOT EXISTS credit_sale_payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            credit_sale_id INTEGER,
-            payment_date TEXT NOT NULL,
-            amount REAL NOT NULL,
-            payment_method TEXT NOT NULL,
-            notes TEXT,
-            user_id INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (credit_sale_id) REFERENCES credit_sales (id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )''')
-
         conn.commit()
         
     def execute_query(self, query, params=None):

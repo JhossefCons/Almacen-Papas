@@ -52,9 +52,9 @@ class SalesView:
         self.date_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        ttk.Label(left, text="Producto:").grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.type_cb = ttk.Combobox(left, state="readonly")
-        self._load_product_options()
+        ttk.Label(left, text="Tipo de papa:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        self.type_cb = ttk.Combobox(left, state="readonly", values=tuple(VALID_COMBOS.keys()))
+        self.type_cb.set("parda")
         self.type_cb.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         self.type_cb.bind("<<ComboboxSelected>>", self._on_combo_change)
         row += 1
@@ -178,7 +178,7 @@ class SalesView:
         xsb.grid(row=1, column=0, sticky="ew")
 
         headers = {
-            'date': 'Fecha', 'type': 'Producto', 'quality': 'Calidad', 'qty': 'Bultos',
+            'date': 'Fecha', 'type': 'Tipo', 'quality': 'Calidad', 'qty': 'Bultos',
             'unit': 'Precio U.', 'total': 'Total', 'customer': 'Cliente', 'pay': 'Pago',
             'user': 'Usuario', 'notes': 'Notas'
         }
@@ -206,17 +206,6 @@ class SalesView:
     # ---------------------------
     # Helpers (form)
     # ---------------------------
-    def _load_product_options(self):
-        try:
-            rows = self.db.execute_query("SELECT DISTINCT potato_type FROM potato_inventory ORDER BY potato_type")
-            products = [r['potato_type'] for r in rows] if rows else []
-            self.type_cb["values"] = tuple(products)
-            if products:
-                self.type_cb.set(products[0])
-        except Exception as e:
-            self.type_cb["values"] = ()
-            print(f"Error loading products: {e}")
-
     def _reload_quality_options(self, potato_type: str):
         values = VALID_COMBOS.get(potato_type.lower(), [])
         self.quality_cb["values"] = tuple(values)
@@ -484,7 +473,6 @@ class SalesView:
 
     # públicos (para refresco general desde MainWindow)
     def refresh_all(self):
-        self._load_product_options()
         self._auto_fill_price()
         self._refresh_stock_labels()
         self._load_sales()

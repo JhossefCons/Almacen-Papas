@@ -130,7 +130,6 @@ class PayrollReportView:
 
     # públicos (lo llama MainWindow al cambiar de pestaña/F5)
     def refresh_all(self):
-        self._load_employees_combo()
         self.refresh_report()
 
     def _parse_year_month(self):

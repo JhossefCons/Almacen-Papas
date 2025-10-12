@@ -30,8 +30,8 @@ class InventoryController:
     def validate_type_quality(self, potato_type: str, quality: str):
         t = (potato_type or "").strip().lower()
         q = (quality or "").strip().lower()
-        if t in VALID_COMBOS and q not in VALID_COMBOS[t]:
-            raise ValueError(f"Calidad inválida para '{potato_type}': '{quality}'. Calidades válidas: {VALID_COMBOS[t]}")
+        if t not in VALID_COMBOS or q not in VALID_COMBOS[t]:
+            raise ValueError(f"Combinación inválida: tipo='{potato_type}', calidad='{quality}'.")
         return t, q
 
     def _require_admin(self):
@@ -237,27 +237,8 @@ class InventoryController:
     def get_stock_matrix(self) -> List[Dict[str, Any]]:
         """Todas las combinaciones con stock actual + precio de venta de referencia (incluye 0)."""
         result: List[Dict[str, Any]] = []
-        # Add predefined combos
         for p_type, qualities in VALID_COMBOS.items():
             for q in qualities:
-                stock = self.get_current_stock(p_type, q)
-                price = self.get_reference_price(p_type, q)
-                result.append({
-                    "potato_type": p_type,
-                    "quality": q,
-                    "stock": stock,
-                    "price": price if price is not None else 0.0
-                })
-        # Add custom combos from DB
-        rows = self.db.execute_query("""
-            SELECT DISTINCT LOWER(potato_type) AS potato_type, LOWER(quality) AS quality
-            FROM potato_inventory
-            WHERE LOWER(potato_type) NOT IN (?, ?, ?)
-        """, tuple(VALID_COMBOS.keys()))
-        if rows:
-            for r in rows:
-                p_type = r["potato_type"]
-                q = r["quality"]
                 stock = self.get_current_stock(p_type, q)
                 price = self.get_reference_price(p_type, q)
                 result.append({
@@ -322,28 +303,10 @@ class InventoryController:
 
         # Armar resultado
         result: List[Dict[str, Any]] = []
-        # Add predefined
         for p_type, qualities in VALID_COMBOS.items():
             for q in qualities:
                 stock = self.get_current_stock(p_type, q)
                 avg_cost = avg_cost_map.get((p_type, q))
-                ref_price = self.get_reference_price(p_type, q)
-                cost_value = (stock * avg_cost) if (avg_cost is not None) else 0.0
-                potential_revenue = (stock * ref_price) if (ref_price is not None) else 0.0
-                margin = potential_revenue - cost_value
-                result.append({
-                    "potato_type": p_type,
-                    "quality": q,
-                    "stock": stock,
-                    "avg_cost": avg_cost,
-                    "cost_value": cost_value,
-                    "ref_price": ref_price,
-                    "potential_revenue": potential_revenue
-                })
-        # Add custom
-        for (p_type, q), avg_cost in avg_cost_map.items():
-            if p_type not in VALID_COMBOS:
-                stock = self.get_current_stock(p_type, q)
                 ref_price = self.get_reference_price(p_type, q)
                 cost_value = (stock * avg_cost) if (avg_cost is not None) else 0.0
                 potential_revenue = (stock * ref_price) if (ref_price is not None) else 0.0
@@ -471,29 +434,3 @@ class InventoryController:
              LIMIT 1
         """, (potato_type, quality))
         return float(rows[0]["unit_price"]) if rows else None
-
-    def rename_product(self, old_type: str, quality: str, new_type: str):
-        """Rename a custom product type."""
-        old_type = old_type.lower().strip()
-        new_type = new_type.lower().strip()
-        quality = quality.lower().strip()
-        if old_type == new_type:
-            return
-        # Update potato_inventory
-        self.db.execute_query(
-            "UPDATE potato_inventory SET potato_type=? WHERE potato_type=? AND quality=?",
-            (new_type, old_type, quality)
-        )
-        # Update inventory_prices
-        self.db.execute_query(
-            "UPDATE inventory_prices SET potato_type=? WHERE potato_type=? AND quality=?",
-            (new_type, old_type, quality)
-        )
-
-    def delete_product(self, potato_type: str):
-        """Delete all records for a custom product type."""
-        potato_type = potato_type.lower().strip()
-        # Delete from potato_inventory
-        self.db.execute_query("DELETE FROM potato_inventory WHERE potato_type=?", (potato_type,))
-        # Delete from inventory_prices
-        self.db.execute_query("DELETE FROM inventory_prices WHERE potato_type=?", (potato_type,))
