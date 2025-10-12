@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 import csv
 
-from modules.cash_register.controller import CashRegisterController
+from modules.cash_register.cash_register_controller import CashRegisterController
 
 # Mapeos de valores internos <-> etiquetas en español
 TYPE_TO_ES = {"income": "Ingreso", "expense": "Egreso"}
@@ -212,6 +212,10 @@ class CashRegisterView:
     # Lógica
     # ---------------------------------------------------------------------
     def _insert_row(self, trans):
+        # Este método no necesita cambios, pero lo incluyo para dar contexto a la posición del nuevo método.
+        pass
+
+    def refresh_all(self):
         amount = float(trans['amount'])
         tipo = trans['type']  # 'income' | 'expense'
         tipo_es = TYPE_TO_ES.get(tipo, tipo)
@@ -232,6 +236,8 @@ class CashRegisterView:
             ),
             tags=(tag,)
         )
+        """Método público para refrescar la vista."""
+        self.load_transactions()
 
     def load_transactions(self):
         """Cargar transacciones en el treeview"""

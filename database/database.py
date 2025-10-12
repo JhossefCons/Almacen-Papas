@@ -92,13 +92,22 @@ class Database:
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-        
-        # Tabla de inventario de papa
+        # Tabla de productos y sus calidades
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS potato_inventory (
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                qualities TEXT NOT NULL, -- Almacenará las calidades separadas por coma, ej: "Primera,Segunda,Tercera"
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Tabla de inventario de papa  -> MODIFICADA A MOVIMIENTOS DE INVENTARIO
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS inventory_movements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
-                potato_type TEXT NOT NULL,
+                product_name TEXT NOT NULL,
                 quality TEXT NOT NULL,
                 operation TEXT NOT NULL,
                 quantity INTEGER NOT NULL,

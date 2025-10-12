@@ -4,13 +4,12 @@ Ventana principal de la aplicación - Versión con módulo de Ventas y responsab
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
-import threading
 from tkinter import messagebox
 import sys
+
 from utils.notifications import NotificationSystem, NotificationCenter
 from utils.scrollframe import ScrollFrame
 from PIL import Image, ImageTk
-
 
 class MainWindow:
     def __init__(self, database, auth_manager):
@@ -18,12 +17,10 @@ class MainWindow:
         self.auth_manager = auth_manager
         self.root = tk.Tk()
         
-        # 👉 Agregar icono a la ventana
         try:
             icon_image = Image.open("assets/icons/iconoPapa.png")
-            # Redimensionar manteniendo proporción
             w, h = icon_image.size
-            max_size = 64  # tamaño máximo recomendado para íconos
+            max_size = 64
             scale = min(max_size / w, max_size / h)
             new_w, new_h = int(w * scale), int(h * scale)
             icon_image = icon_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
@@ -32,154 +29,129 @@ class MainWindow:
         except Exception as e:
             print(f"No se pudo cargar el icono de la ventana: {e}")
 
-        # Sistema de notificaciones
         self.notification_center = NotificationCenter(self.root)
         self.notification_system = NotificationSystem(database, self.notification_center)
-
-
-
         self.setup_window()
         
     def setup_window(self):
-        """Configurar la ventana principal"""
         self.root.title("Sistema de Gestión Integral - PapaSoft")
         self.root.geometry("1200x700")
         self.root.configure(bg='#f0f0f0')
-        
-        # Configurar icono (si existe)
-        try:
-            self.root.iconbitmap("assets/iconoPapa.ico")
-        except:
-            pass
-        
-        # Configurar la barra de menú
         self.setup_menu()
-        
-        # Configurar la barra de herramientas
         self.setup_toolbar()
-        
-        # Configurar el notebook (pestañas)
         self.setup_notebook()
-        
-        # Configurar la barra de estado
         self.setup_status_bar()
-        
-        # Iniciar sistema de notificaciones
         self.notification_system.start()
-        
-        # Configurar cierre seguro
         self.root.protocol("WM_DELETE_WINDOW", self.safe_exit)
     
     def setup_menu(self):
-        """Configurar la barra de menú"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
-        
-        # Menú Archivo
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Archivo", menu=file_menu)
         file_menu.add_command(label="Cerrar Sesión", command=self.logout)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.safe_exit)
-        
-        # Menú Edición
-        edit_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Edición", menu=edit_menu)
-        edit_menu.add_command(label="Preferencias", command=self.show_preferences)
-        
-        # Menú Ver
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Ver", menu=view_menu)
-        view_menu.add_command(label="Notificaciones", command=self.show_notifications)
-        view_menu.add_command(label="Actualizar", command=self.refresh_all)
-        
-        # Menú Administración (solo para admins)
+        view_menu.add_command(label="Actualizar Pestaña", command=self.refresh_current_tab)
         if self.auth_manager.has_permission('admin'):
             admin_menu = tk.Menu(menubar, tearoff=0)
             menubar.add_cascade(label="Administración", menu=admin_menu)
             admin_menu.add_command(label="Gestión de Usuarios", command=self.show_user_management)
-            admin_menu.add_command(label="Backup Base de Datos", command=self.backup_database)
-            admin_menu.add_command(label="Restaurar Backup", command=self.restore_backup)
-        
-        # Acerca de
-        menubar.add_command(label="Acerca de PapaSoft", command=self.show_about)
     
     def setup_toolbar(self):
-        """Configurar la barra de herramientas"""
         toolbar = ttk.Frame(self.root, relief=tk.RAISED, borderwidth=1)
         toolbar.pack(side=tk.TOP, fill=tk.X)
-        
-        # Botones de la toolbar
-        ttk.Button(toolbar, text="Actualizar", command=self.refresh_all).pack(side=tk.LEFT, padx=2, pady=2)
-        ttk.Button(toolbar, text="Notificaciones", command=self.show_notifications).pack(side=tk.LEFT, padx=2, pady=2)
-        
-        # Separador
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
+        ttk.Button(toolbar, text="Actualizar", command=self.refresh_current_tab).pack(side=tk.LEFT, padx=2, pady=2)
     
     def setup_notebook(self):
-        """Configurar el notebook con pestañas para cada módulo (con scroll)."""
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
 
-        try:
-            # Import dinámico de vistas disponibles
-            from modules.cash_register.views import CashRegisterView
-        except Exception:
-            CashRegisterView = None
-        try:
-            from modules.sales.views import SalesView
-        except Exception:
-            SalesView = None
-        try:
-            from modules.loans.views import LoansView
-        except Exception:
-            LoansView = None
-        try:
-            from modules.inventory.views import InventoryView
-        except Exception:
-            InventoryView = None
-        try:
-            from modules.employees.views import EmployeesView
-        except Exception:
-            EmployeesView = None
-        try:
-            from modules.payroll.views import PayrollReportView
-        except Exception:
-            PayrollReportView = None
+        try: from modules.cash_register.cash_register_views import CashRegisterView
+        except Exception: CashRegisterView = None
+        try: from modules.sales.sales_views import SalesView
+        except Exception: SalesView = None
+        try: from modules.inventory.inventory_views import InventoryView
+        except Exception: InventoryView = None
+        try: from modules.products.products_views import ProductsView
+        except Exception: ProductsView = None
+        try: from modules.loans.loans_views import LoansView
+        except Exception: LoansView = None
+        try: from modules.employees.employees_views import EmployeesView
+        except Exception: EmployeesView = None
+        try: from modules.payroll.payroll_views import PayrollReportView
+        except Exception: PayrollReportView = None
 
-        # Helper para crear pestañas con scroll y montar la vista
+        self.views = {} # Diccionario para guardar referencias a las vistas
+
         def _add_tab(title, ViewClass, attr_name, *extra_args):
             frame = ttk.Frame(self.notebook)
             self.notebook.add(frame, text=title)
-            if ViewClass is None:
-                ttk.Label(frame, text=f"{title} - No disponible (módulo no encontrado)").pack(pady=20)
+            if not ViewClass:
+                ttk.Label(frame, text=f"{title} - No disponible").pack(pady=20)
                 return
             scroll = ScrollFrame(frame, fit_width=True)
             scroll.pack(fill=tk.BOTH, expand=True)
-            parent_for_view = scroll.body  # aquí la vista puede usar pack/grid sin restricciones
-            view = ViewClass(parent_for_view, self.db, self.auth_manager, *extra_args)
-            setattr(self, attr_name, view)
+            view = ViewClass(scroll.body, self.db, self.auth_manager, *extra_args)
+            self.views[attr_name] = view # Guardar la instancia de la vista
 
-        # Crea pestañas
         _add_tab("Módulo de Caja", CashRegisterView, "cash_view")
         if SalesView:
             try:
-                from modules.cash_register.controller import CashRegisterController
+                from modules.cash_register.cash_register_controller import CashRegisterController
                 self.cash_controller = CashRegisterController(self.db, self.auth_manager)
                 _add_tab("Ventas", SalesView, "sales_view", self.cash_controller)
-            except Exception:
-                _add_tab("Ventas", SalesView, "sales_view")
-        _add_tab("Inventario de Papa", InventoryView, "inventory_view")
+            except Exception as e:
+                print(f"Error al cargar Ventas: {e}")
+                _add_tab("Ventas", None, "sales_view")
+
+        _add_tab("Inventario", InventoryView, "inventory_view")
+        _add_tab("Productos", ProductsView, "products_view")
         _add_tab("Préstamos a Empleados", LoansView, "loans_view")
         _add_tab("Empleados", EmployeesView, "employees_view")
         _add_tab("Nómina", PayrollReportView, "payroll_view")
 
-        # refresco al cambiar de pestaña (si ya tienes uno, mantén el tuyo)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self.root.bind("<F5>", lambda e: self.refresh_current_tab())
-        
-        # 🔔 Escuchar ventas creadas para refrescar Inventario en caliente
-        self.root.bind("<<SaleCreated>>", lambda e: self._on_sale_created())
+        self.root.bind("<<ProductsChanged>>", self._on_products_changed)
+        self.root.bind("<<SaleCreated>>", self._on_sale_created)
+
+    # --- MÉTODOS DE COMUNICACIÓN Y REFRESCO ---
+
+    def _on_products_changed(self, _=None):
+        """Refresca módulos que dependen de la lista de productos (Inventario y Ventas)."""
+        if self.views.get("inventory_view"):
+            self.views["inventory_view"].refresh_all()
+        if self.views.get("sales_view"):
+            self.views["sales_view"].refresh_all(load_history=False)
+
+    def _on_sale_created(self, _=None):
+        """Cuando se crea una venta, refresca el inventario."""
+        if self.views.get("inventory_view"):
+            self.views["inventory_view"].refresh_all()
+
+    def _on_tab_changed(self, event):
+        """Refresca la pestaña que acaba de ser seleccionada."""
+        self.refresh_current_tab()
+    
+    def refresh_current_tab(self):
+        """Llama al método 'refresh_all' de la vista actualmente visible."""
+        try:
+            selected_tab_index = self.notebook.index(self.notebook.select())
+            # Encontrar el nombre de la vista correspondiente a ese índice
+            # Esto es un poco frágil si el orden de las pestañas cambia, pero funciona por ahora.
+            view_map = {
+                0: "cash_view", 1: "sales_view", 2: "inventory_view", 
+                3: "products_view", 4: "loans_view", 5: "employees_view", 6: "payroll_view"
+            }
+            view_key = view_map.get(selected_tab_index)
+            if view_key and self.views.get(view_key):
+                self.views[view_key].refresh_all()
+        except Exception as e:
+            print(f"No se pudo refrescar la pestaña actual: {e}")
+            
 
     def _on_sale_created(self):
         try:
@@ -223,32 +195,25 @@ class MainWindow:
 
     def _on_tab_changed(self, event):
         """Se dispara al cambiar de pestaña: refresca solo ese módulo."""
-        try:
-            tab_text = event.widget.tab(event.widget.select(), "text").lower()
-            if "venta" in tab_text and hasattr(self, "sales_view"):
-                self._refresh_view_safely(self.sales_view)
-            elif "caja" in tab_text and hasattr(self, "cash_view"):
-                self._refresh_view_safely(self.cash_view)
-            elif ("préstamo" in tab_text or "prestamo" in tab_text) and hasattr(self, "loans_view"):
-                self._refresh_view_safely(self.loans_view)
-            elif "inventario" in tab_text and hasattr(self, "inventory_view"):
-                self._refresh_view_safely(self.inventory_view)
-            elif "emplead" in tab_text and hasattr(self, "employees_view"):
-                self._refresh_view_safely(self.employees_view)
-            elif "nómina" in tab_text or "nomina" in tab_text:
-                if hasattr(self, "payroll_view"):
-                    self._refresh_view_safely(self.payroll_view)
-            else:
-                # Si no reconoce la pestaña, como fallback refresca todo
-                self.refresh_all()
-        except Exception:
-            pass
+        # Obtener el frame de la pestaña seleccionada
+        selected_tab_frame = self.notebook.nametowidget(self.notebook.select())
+        
+        # El contenido real está dentro del ScrollFrame, en el 'body'
+        # y la vista está dentro del 'body'.
+        # Buscamos la vista entre los hijos del 'body' del ScrollFrame.
+        for widget in selected_tab_frame.winfo_children():
+            if isinstance(widget, ScrollFrame):
+                # El 'body' del ScrollFrame contiene la vista principal del módulo.
+                # Asumimos que la vista es el primer y único widget hijo principal del body.
+                if widget.body.winfo_children():
+                    view_widget = widget.body.winfo_children()[0]
+                    self._refresh_view_safely(view_widget)
+                break
 
     def refresh_current_tab(self):
         """Refresca la pestaña activa (atajo para F5 y para usar donde quieras)."""
         self._on_tab_changed(type("E", (object,), {"widget": self.notebook})())
-
-    
+ 
     def setup_status_bar(self):
         """Configurar la barra de estado"""
         status_frame = ttk.Frame(self.root)
@@ -497,3 +462,12 @@ class MainWindow:
         self.root.geometry(f'{width}x{height}+{x}+{y}')
         
         self.root.mainloop()
+
+    def _on_products_changed(self, _=None):
+        """Se dispara cuando un producto es creado, editado o eliminado."""
+        print("Evento <<ProductsChanged>> detectado. Refrescando inventario...")
+        try:
+            if hasattr(self, "inventory_view") and self.inventory_view:
+                self.inventory_view.refresh_all()
+        except Exception as e:
+            print(f"Error al intentar refrescar la vista de inventario: {e}")

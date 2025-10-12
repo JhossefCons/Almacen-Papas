@@ -14,7 +14,7 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 from datetime import datetime, timedelta
 
-from modules.loans.controller import LoansController
+from modules.loans.loans_controller import LoansController
 
 PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
 
@@ -30,6 +30,11 @@ class LoansView:
         self.load_employees()
         self.load_loans()
 
+    def refresh_all(self):
+        """Método público para refrescar toda la vista."""
+        self.load_employees()
+        self.load_loans()
+        self.update_alerts()
     # -----------------------------
     # UI
     # -----------------------------
@@ -228,6 +233,8 @@ class LoansView:
             self.emp_last.delete(0, tk.END)
             self.emp_salary.delete(0, tk.END)
             self.load_employees()
+            # Notificar a otros módulos que un empleado ha cambiado
+            self.parent.winfo_toplevel().event_generate("<<EmployeeChanged>>")
         except ValueError:
             messagebox.showerror("Error", "Salario debe ser un número.")
         except Exception as e:

@@ -7,7 +7,7 @@ Vista de Administración de Empleados
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from modules.employees.controller import EmployeesController
+from modules.employees.employees_controller import EmployeesController
 
 
 class EmployeesView:
@@ -19,6 +19,8 @@ class EmployeesView:
 
         self._build_ui()
         self.load_employees()
+        # Escuchar el evento personalizado para refrescarse automáticamente
+        self.parent.winfo_toplevel().bind("<<EmployeeChanged>>", lambda e: self.load_employees())
 
     def _build_ui(self):
         container = ttk.Frame(self.parent, padding=10)
@@ -99,6 +101,8 @@ class EmployeesView:
             try:
                 self.controller.add_employee(e_first.get().strip(), e_last.get().strip(), float((e_sal.get() or "0").strip()))
                 messagebox.showinfo("Empleados", "Empleado creado.")
+                # Notificar a otros módulos que un empleado ha cambiado
+                self.parent.winfo_toplevel().event_generate("<<EmployeeChanged>>")
                 win.destroy(); self.load_employees()
             except ValueError:
                 messagebox.showerror("Error", "Salario inválido")
@@ -142,6 +146,8 @@ class EmployeesView:
             try:
                 self.controller.update_employee(emp_id, e_first.get().strip(), e_last.get().strip(),
                                                 float((e_sal.get() or "0").strip()), is_act.get())
+                # Notificar a otros módulos que un empleado ha cambiado
+                self.parent.winfo_toplevel().event_generate("<<EmployeeChanged>>")
                 messagebox.showinfo("Empleados", "Empleado actualizado.")
                 win.destroy(); self.load_employees()
             except ValueError:
@@ -161,6 +167,8 @@ class EmployeesView:
             return
         try:
             self.controller.toggle_active(emp_id, active)
+            # Notificar a otros módulos que un empleado ha cambiado
+            self.parent.winfo_toplevel().event_generate("<<EmployeeChanged>>")
             self.load_employees()
         except Exception as e:
             messagebox.showerror("Error", str(e))

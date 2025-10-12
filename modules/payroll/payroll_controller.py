@@ -12,7 +12,7 @@ Compatibilidad:
     * Egreso por pago sueldo:  type='expense', category='Nómina',
                                description LIKE 'Pago salario - {Nombre}%'
 """
-from modules.loans.controller import LoansController
+from modules.loans.loans_controller import LoansController
 
 class PayrollController:
     def __init__(self, database, auth_manager):
@@ -181,13 +181,13 @@ class PayrollController:
             emp_name = self.loans.format_employee_name(emp)
             if total_deducted > 0:
                 # ingreso por deducción
-                from modules.cash_register.controller import CashRegisterController
+                from modules.cash_register.cash_register_controller import CashRegisterController
                 cash = CashRegisterController(self.db, self.auth)
                 cash.add_transaction(date, "income",
                                      f"Deducción préstamo vía nómina: {emp_name}",
                                      round(total_deducted, 2), payment_method, "nomina_deduccion_prestamo")
             if net > 0:
-                from modules.cash_register.controller import CashRegisterController
+                from modules.cash_register.cash_register_controller import CashRegisterController
                 cash = CashRegisterController(self.db, self.auth)
                 cash.add_transaction(date, "expense",
                                      f"Pago de salario: {emp_name}",

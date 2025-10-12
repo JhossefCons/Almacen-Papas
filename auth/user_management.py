@@ -72,6 +72,10 @@ class UserManagementView:
         # Bind eventos
         self.users_tree.bind('<Double-1>', self.on_user_double_click)
     
+    def refresh_all(self):
+        """Método público para refrescar la vista."""
+        self.load_users()
+
     def load_users(self):
         """Cargar usuarios en el treeview"""
         # Limpiar treeview

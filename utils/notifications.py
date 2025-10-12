@@ -79,26 +79,26 @@ class NotificationSystem:
         try:
             query = """
                 SELECT
-                    potato_type,
+                    product_name as potato_type,
                     quality,
                     SUM(CASE WHEN operation = 'entry' THEN quantity ELSE -quantity END) as current_stock
-                FROM potato_inventory
-                GROUP BY potato_type, quality
+                FROM inventory_movements
+                GROUP BY product_name, quality
                 HAVING current_stock > 0 AND current_stock <= 20  -- Umbral de 20 costales
             """
-            
+
             results = self.db.execute_query(query)
             low_stock_items = [dict(row) for row in results] if results else []
-            
+
             for item in low_stock_items:
                 notification_key = f"lowstock_{item['potato_type']}_{item['quality']}_{datetime.now().strftime('%Y-%m-%d')}"
-                
+
                 self.show_notification(
                     "Stock Bajo",
                     f"Stock bajo de {item['potato_type']} {item['quality']}: "
                     f"{item['current_stock']} costales restantes"
                 )
-                
+
         except Exception as e:
             print(f"Error verificando stock bajo: {e}")
     

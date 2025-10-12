@@ -8,7 +8,7 @@ Controlador para el módulo de préstamos a empleados
 """
 
 from datetime import datetime
-from modules.cash_register.controller import CashRegisterController
+from modules.cash_register.cash_register_controller import CashRegisterController
 
 
 class LoansController:

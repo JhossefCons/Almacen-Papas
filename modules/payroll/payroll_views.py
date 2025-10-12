@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkcalendar import DateEntry
 from datetime import datetime
-from modules.payroll.controller import PayrollController
+from modules.payroll.payroll_controller import PayrollController
 
 PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
 
@@ -131,6 +131,7 @@ class PayrollReportView:
     # públicos (lo llama MainWindow al cambiar de pestaña/F5)
     def refresh_all(self):
         self.refresh_report()
+        self._load_employees_combo()
 
     def _parse_year_month(self):
         try:
@@ -324,4 +325,3 @@ class PayrollReportView:
             self.refresh_report()
         except Exception as e:
             messagebox.showerror("Nómina", str(e))
-
