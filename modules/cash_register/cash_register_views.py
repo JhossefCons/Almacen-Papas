@@ -212,10 +212,7 @@ class CashRegisterView:
     # Lógica
     # ---------------------------------------------------------------------
     def _insert_row(self, trans):
-        # Este método no necesita cambios, pero lo incluyo para dar contexto a la posición del nuevo método.
-        pass
-
-    def refresh_all(self):
+        """Inserta una fila de transacción en el árbol (treeview)."""
         amount = float(trans['amount'])
         tipo = trans['type']  # 'income' | 'expense'
         tipo_es = TYPE_TO_ES.get(tipo, tipo)
@@ -236,7 +233,12 @@ class CashRegisterView:
             ),
             tags=(tag,)
         )
-        """Método público para refrescar la vista."""
+
+    def refresh_all(self):
+        """
+        Método público para refrescar la vista. 
+        Esto es llamado por main_window cuando cambias de pestaña.
+        """
         self.load_transactions()
 
     def load_transactions(self):

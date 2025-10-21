@@ -120,6 +120,87 @@ class Database:
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
+        
+        # Almacena la cabecera de la venta a crédito
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS credit_sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                date_issued TEXT NOT NULL,
+                due_date TEXT,
+                total_amount REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'unpaid',
+                notes TEXT,
+                user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                paid_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Almacena el anticipo (el "préstamo" al proveedor)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS supplier_advances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_name TEXT NOT NULL,
+                date_issued TEXT NOT NULL,
+                total_amount REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'unpaid',
+                notes TEXT,
+                user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                applied_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Almacena la "aplicación" (el cruce con una compra)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS supplier_advance_apps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                advance_id INTEGER NOT NULL,
+                application_date TEXT NOT NULL,
+                purchase_total REAL NOT NULL,
+                applied_amount REAL NOT NULL,
+                remaining_payment REAL NOT NULL,
+                notes TEXT,
+                user_id INTEGER,
+                cash_register_id INTEGER,
+                FOREIGN KEY (advance_id) REFERENCES supplier_advances (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Almacena los productos (items) de cada venta a crédito
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS credit_sale_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                credit_sale_id INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_price REAL NOT NULL,
+                total_value REAL NOT NULL,
+                FOREIGN KEY (credit_sale_id) REFERENCES credit_sales (id) ON DELETE CASCADE
+            )
+        ''')
+
+        # Almacena los pagos recibidos para una venta a crédito
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS credit_sale_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                credit_sale_id INTEGER NOT NULL,
+                payment_date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                payment_method TEXT NOT NULL,
+                notes TEXT,
+                user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                cash_register_id INTEGER,
+                FOREIGN KEY (credit_sale_id) REFERENCES credit_sales (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
 
         # Stock de costales (empaque) - tabla única con id=1
         cursor.execute('''

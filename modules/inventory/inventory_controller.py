@@ -6,7 +6,6 @@ Controlador de Inventario de Productos (Generalizado)
 - Gestiona stock de costales (empaque)
 - Valorización del inventario (costo, valor potencial, margen)
 """
-
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -162,10 +161,10 @@ class InventoryController:
         rows = self.db.execute_query(
             """
             SELECT unit_price
-              FROM inventory_movements
-             WHERE LOWER(product_name)=? AND LOWER(quality)=? AND operation='entry'
-             ORDER BY date DESC, id DESC
-             LIMIT 1
+                FROM inventory_movements
+                WHERE LOWER(product_name)=? AND LOWER(quality)=? AND operation='entry'
+                ORDER BY date DESC, id DESC
+                LIMIT 1
             """,
             (t, q),
         )
@@ -225,7 +224,7 @@ class InventoryController:
         query = f"""
             SELECT
                 COALESCE(SUM(CASE WHEN operation='entry' THEN quantity ELSE 0 END), 0)
-              - COALESCE(SUM(CASE WHEN operation='exit'  THEN quantity ELSE 0 END), 0) AS stock
+                - COALESCE(SUM(CASE WHEN operation='exit'  THEN quantity ELSE 0 END), 0) AS stock
             FROM inventory_movements
             WHERE 1=1 {where}
         """
@@ -250,8 +249,8 @@ class InventoryController:
     def get_inventory_valuation(self) -> List[Dict[str, Any]]:
         rows = self.db.execute_query("""
             SELECT LOWER(product_name) AS product_name, LOWER(quality) AS quality,
-                   SUM(CASE WHEN operation='entry' THEN quantity ELSE 0 END) AS qty_in,
-                   SUM(CASE WHEN operation='entry' THEN quantity * unit_price ELSE 0 END) AS cost_in
+                    SUM(CASE WHEN operation='entry' THEN quantity ELSE 0 END) AS qty_in,
+                    SUM(CASE WHEN operation='entry' THEN quantity * unit_price ELSE 0 END) AS cost_in
             FROM inventory_movements
             GROUP BY LOWER(product_name), LOWER(quality)
         """)

@@ -11,6 +11,21 @@ from utils.notifications import NotificationSystem, NotificationCenter
 from utils.scrollframe import ScrollFrame
 from PIL import Image, ImageTk
 
+# --- VISTAS DE MÓDULOS ---
+from modules.cash_register.cash_register_views import CashRegisterView
+from modules.sales.sales_views import SalesView
+from modules.inventory.inventory_views import InventoryView
+from modules.products.products_views import ProductsView
+from modules.loans.loans_views import LoansView
+from modules.employees.employees_views import EmployeesView
+from modules.payroll.payroll_views import PayrollReportView
+# Asegúrate de incluir la que creamos en el paso anterior
+from modules.credit_sales.credit_sales_views import CreditSalesView
+from modules.supplier_advances.supplier_advances_views import SupplierAdvancesView
+
+# --- CONTROLADORES NECESARIOS ---
+from modules.cash_register.cash_register_controller import CashRegisterController
+
 class MainWindow:
     def __init__(self, database, auth_manager):
         self.db = database
@@ -69,21 +84,6 @@ class MainWindow:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
 
-        try: from modules.cash_register.cash_register_views import CashRegisterView
-        except Exception: CashRegisterView = None
-        try: from modules.sales.sales_views import SalesView
-        except Exception: SalesView = None
-        try: from modules.inventory.inventory_views import InventoryView
-        except Exception: InventoryView = None
-        try: from modules.products.products_views import ProductsView
-        except Exception: ProductsView = None
-        try: from modules.loans.loans_views import LoansView
-        except Exception: LoansView = None
-        try: from modules.employees.employees_views import EmployeesView
-        except Exception: EmployeesView = None
-        try: from modules.payroll.payroll_views import PayrollReportView
-        except Exception: PayrollReportView = None
-
         self.views = {} # Diccionario para guardar referencias a las vistas
 
         def _add_tab(title, ViewClass, attr_name, *extra_args):
@@ -94,30 +94,42 @@ class MainWindow:
                 return
             scroll = ScrollFrame(frame, fit_width=True)
             scroll.pack(fill=tk.BOTH, expand=True)
+            # Esta línea ahora recibe los 'extra_args' (el controlador)
             view = ViewClass(scroll.body, self.db, self.auth_manager, *extra_args)
             self.views[attr_name] = view # Guardar la instancia de la vista
 
+        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+        # 1. Crea el controlador de caja ANTES de llamar a las vistas que lo usan.
+        try:
+            self.cash_controller = CashRegisterController(self.db, self.auth_manager)
+        except Exception as e:
+            messagebox.showerror("Error Crítico", f"No se pudo iniciar el controlador de Caja: {e}")
+            self.cash_controller = None # Si falla, las vistas dependientes no se cargarán
+
+        # 2. Añade las pestañas
         _add_tab("Módulo de Caja", CashRegisterView, "cash_view")
-        if SalesView:
-            try:
-                from modules.cash_register.cash_register_controller import CashRegisterController
-                self.cash_controller = CashRegisterController(self.db, self.auth_manager)
-                _add_tab("Ventas", SalesView, "sales_view", self.cash_controller)
-            except Exception as e:
-                print(f"Error al cargar Ventas: {e}")
-                _add_tab("Ventas", None, "sales_view")
+
+        # 3. Pasa el 'self.cash_controller' como argumento extra
+        if self.cash_controller:
+            _add_tab("Ventas", SalesView, "sales_view", self.cash_controller)
+            _add_tab("Ventas a Crédito", CreditSalesView, "credit_sales_view", self.cash_controller)
+            _add_tab("Anticipos Proveedores", SupplierAdvancesView, "advances_view", self.cash_controller)
+        else:
+            # Si el controlador de caja falló, no intentes cargar estas vistas
+            _add_tab("Ventas", None, "sales_view")
+            _add_tab("Ventas a Crédito", None, "credit_sales_view")
 
         _add_tab("Inventario", InventoryView, "inventory_view")
         _add_tab("Productos", ProductsView, "products_view")
         _add_tab("Préstamos a Empleados", LoansView, "loans_view")
         _add_tab("Empleados", EmployeesView, "employees_view")
         _add_tab("Nómina", PayrollReportView, "payroll_view")
+        # --- FIN DE LA CORRECCIÓN ---
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self.root.bind("<F5>", lambda e: self.refresh_current_tab())
         self.root.bind("<<ProductsChanged>>", self._on_products_changed)
         self.root.bind("<<SaleCreated>>", self._on_sale_created)
-
     # --- MÉTODOS DE COMUNICACIÓN Y REFRESCO ---
 
     def _on_products_changed(self, _=None):
