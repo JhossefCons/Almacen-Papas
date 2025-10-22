@@ -3,7 +3,7 @@
 Controlador para Anticipos a Proveedores
 - Crea un anticipo y registra el egreso en Caja.
 - Aplica el anticipo contra una compra y registra el pago restante (si lo hay).
-- Revierte un anticipo (con un ingreso en Caja) si se elimina.
+- Elimina un anticipo y elimina también el egreso original de Caja.
 """
 
 from typing import List, Dict, Tuple, Optional
@@ -13,7 +13,7 @@ from modules.cash_register.cash_register_controller import CashRegisterControlle
 class SupplierAdvancesController:
     def __init__(self, database, auth_manager, cash_controller):
         self.db = database
-        self.auth: AuthManager = auth_manager # Asumiendo que tienes AuthManager
+        self.auth = auth_manager # Asumiendo que tienes AuthManager
         self.cash: CashRegisterController = cash_controller
 
     def _get_user_id(self):
@@ -47,13 +47,14 @@ class SupplierAdvancesController:
             )
             
             # 2. Insertar el anticipo
+            # --- CAMBIO: Se añade cash_register_id a la inserción ---
             cursor.execute(
                 """
                 INSERT INTO supplier_advances 
-                    (supplier_name, date_issued, total_amount, status, notes, user_id, created_at)
-                VALUES (?, ?, ?, 'unpaid', ?, ?, CURRENT_TIMESTAMP)
+                    (supplier_name, date_issued, total_amount, status, notes, user_id, created_at, cash_register_id)
+                VALUES (?, ?, ?, 'unpaid', ?, ?, CURRENT_TIMESTAMP, ?)
                 """,
-                (supplier_name.strip(), date, amount, notes, user_id)
+                (supplier_name.strip(), date, amount, notes, user_id, cash_id)
             )
             advance_id = cursor.lastrowid
             
@@ -123,7 +124,7 @@ class SupplierAdvancesController:
     def delete_advance(self, advance_id: int):
         """
         Elimina un anticipo NO APLICADO.
-        Crea un INGRESO en Caja para reversar el gasto original.
+        Elimina el egreso original de Caja.
         """
         if not self.auth.has_permission('admin'):
              raise PermissionError("Solo un administrador puede eliminar anticipos.")
@@ -134,18 +135,19 @@ class SupplierAdvancesController:
         if adv['status'] == 'applied':
             raise PermissionError("No se puede eliminar un anticipo que ya fue aplicado a una compra.")
         
+        # --- CAMBIO: Obtener el ID de la transacción de caja original ---
+        original_cash_id = adv.get('cash_register_id')
+
         conn = self.db.connect()
         cursor = conn.cursor()
         try:
-            # 1. Registrar la REVERSIÓN (Ingreso) en Caja
-            self.cash.add_transaction(
-                date=datetime.now().strftime('%Y-%m-%d'),
-                type="income",
-                description=f"Reversión anticipo ID {advance_id}: {adv['supplier_name']}",
-                amount=adv['total_amount'],
-                payment_method="cash", # O el método que corresponda
-                category="reversion_anticipo"
-            )
+            # 1. Eliminar la transacción de Caja original (si está registrada)
+            if original_cash_id:
+                try:
+                    self.cash.delete_transaction(original_cash_id)
+                except Exception as e:
+                    # Si falla (ej. ya se borró manualmente), al menos avisa.
+                    print(f"Advertencia: No se pudo eliminar el mov. de caja ID {original_cash_id}: {e}")
             
             # 2. Eliminar el anticipo
             cursor.execute("DELETE FROM supplier_advances WHERE id = ?", (advance_id,))

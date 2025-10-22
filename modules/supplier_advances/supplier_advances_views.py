@@ -112,12 +112,11 @@ class SupplierAdvancesView:
         self.app_payment_cb.set("Efectivo")
         self.app_payment_cb.grid(row=6, column=1, sticky=tk.W, padx=5)
 
-        ttk.Label(self.lf_app, text="Notas Compra:").grid(row=7, column=0, sticky=tk.W, pady=2)
-        self.app_notes_entry = ttk.Entry(self.lf_app)
-        self.app_notes_entry.grid(row=7, column=1, sticky=tk.EW, padx=5)
+        # --- CAMBIO: Se eliminó el campo de Notas de Compra ---
         
         self.apply_adv_btn = ttk.Button(self.lf_app, text="Aplicar a Compra", command=self._apply_purchase)
-        self.apply_adv_btn.grid(row=8, column=0, columnspan=2, pady=10)
+        # Se movió el botón a la fila 7 (antes 8)
+        self.apply_adv_btn.grid(row=7, column=0, columnspan=2, pady=10)
         
         self.lf_app.columnconfigure(1, weight=1)
         self._toggle_application_form(False) # Deshabilitado al inicio
@@ -149,11 +148,16 @@ class SupplierAdvancesView:
         self.delete_adv_btn = ttk.Button(filters, text="Eliminar Anticipo", command=self._delete_advance)
         self.delete_adv_btn.grid(row=0, column=7, padx=4)
 
+        # --- CAMBIO: Se agregó el botón de Reporte PDF ---
+        self.report_adv_btn = ttk.Button(filters, text="Reporte PDF", command=self._export_pdf)
+        self.report_adv_btn.grid(row=0, column=8, padx=4)
+
         # --- Tabla Principal ---
         tree_frame = ttk.Frame(parent, padding=(0, 10, 0, 0))
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ('id', 'date', 'supplier', 'total', 'status', 'applied_at')
+        # --- CAMBIO: Se agregó la columna 'notes' ---
+        columns = ('id', 'date', 'supplier', 'total', 'status', 'applied_at', 'notes')
         self.tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=18)
         
         ysb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -167,14 +171,20 @@ class SupplierAdvancesView:
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
 
+        # --- CAMBIO: Se agregaron headers y widths para 'notes' ---
         headers = {
             'id': 'ID', 'date': 'Fecha', 'supplier': 'Proveedor', 'total': 'Monto',
-            'status': 'Estado', 'applied_at': 'Fecha Aplic.'
+            'status': 'Estado', 'applied_at': 'Fecha Aplic.', 'notes': 'Nota Anticipo'
         }
-        widths = {'id': 40, 'date': 90, 'supplier': 250, 'total': 120, 'status': 100, 'applied_at': 90}
+        widths = {'id': 40, 'date': 90, 'supplier': 200, 'total': 100, 'status': 80, 'applied_at': 90, 'notes': 250}
         
         for c in columns:
-            anchor = tk.W if c == 'supplier' else (tk.E if c == 'total' else tk.CENTER)
+            # Se ajustó el anclaje para 'notes'
+            anchor = tk.W 
+            if c == 'total':
+                anchor = tk.E
+            elif c in ('id', 'date', 'status', 'applied_at'):
+                anchor = tk.CENTER
             self.tree.heading(c, text=headers[c])
             self.tree.column(c, width=widths[c], anchor=anchor, stretch=True)
 
@@ -211,13 +221,15 @@ class SupplierAdvancesView:
                 tag = "applied_status" if adv['status'] == 'applied' else "unpaid_status"
                 tags = (tag, "oddrow") if i % 2 else (tag,)
 
+                # --- CAMBIO: Se agregó adv['notes'] a los valores ---
                 self.tree.insert("", tk.END, iid=adv['id'], values=(
                     adv['id'],
                     adv['date_issued'],
                     adv['supplier_name'],
                     f"S/ {adv['total_amount']:.2f}",
                     status_text,
-                    adv['applied_at'] or 'N/A'
+                    adv['applied_at'] or 'N/A',
+                    adv['notes'] or ''
                 ), tags=tags)
         except Exception as e:
             messagebox.showerror("Error al cargar anticipos", str(e))
@@ -233,9 +245,26 @@ class SupplierAdvancesView:
     def _save_advance(self):
         """Guarda el nuevo anticipo y actualiza la Caja."""
         try:
+            # --- CAMBIO: Validación de Proveedor ---
             supplier = self.supplier_entry.get().strip()
+            if not supplier:
+                messagebox.showerror("Dato Vacío", "El nombre del 'Proveedor' no puede estar vacío.")
+                return
+
             date = self.adv_date_entry.get_date().strftime('%Y-%m-%d')
-            amount = float(self.adv_amount_entry.get())
+
+            # --- CAMBIO: Validación de Monto (número y > 0) ---
+            try:
+                amount_str = self.adv_amount_entry.get().strip()
+                if not amount_str:
+                    raise ValueError("El campo 'Monto' no puede estar vacío.")
+                amount = float(amount_str)
+                if amount <= 0:
+                    raise ValueError("El 'Monto' debe ser un número positivo.")
+            except ValueError as ve:
+                messagebox.showerror("Dato Inválido", f"Error en 'Monto':\n{ve}", parent=self.parent)
+                return
+            
             method = PAY_TO_CODE[self.adv_payment_cb.get()]
             notes = self.adv_notes_entry.get().strip()
 
@@ -322,7 +351,8 @@ class SupplierAdvancesView:
         self.lf_app.config(text="Aplicar a Compra (Seleccione un anticipo)")
         self.selected_adv_label.config(text="Anticipo: N/A")
         self.app_purchase_total_entry.delete(0, tk.END)
-        self.app_notes_entry.delete(0, tk.END)
+        # --- CAMBIO: Se eliminó la limpieza del campo de notas ---
+        # self.app_notes_entry.delete(0, tk.END)
         self.app_payment_cb.set("Efectivo")
         self.app_adv_amount_lbl.config(text="Anticipo a Aplicar: S/ 0.00")
         self.app_remaining_lbl.config(text="Restante a Pagar: S/ 0.00", foreground="black")
@@ -336,10 +366,23 @@ class SupplierAdvancesView:
         
         try:
             app_date = self.app_date_entry.get_date().strftime('%Y-%m-%d')
-            purchase_total = float(self.app_purchase_total_entry.get())
+            
+            # --- CAMBIO: Validación de Total Compra (número y > 0) ---
+            try:
+                purchase_total_str = self.app_purchase_total_entry.get().strip()
+                if not purchase_total_str:
+                    raise ValueError("El campo 'Total Compra' no puede estar vacío.")
+                purchase_total = float(purchase_total_str)
+                if purchase_total <= 0:
+                     raise ValueError("El 'Total Compra' debe ser un número positivo.")
+            except ValueError as ve:
+                messagebox.showerror("Dato Inválido", f"Error en 'Total Compra':\n{ve}", parent=self.parent)
+                return
+            
             pay_remaining = self.app_pay_remaining_check.get()
             payment_method = PAY_TO_CODE[self.app_payment_cb.get()]
-            notes = self.app_notes_entry.get().strip()
+            # --- CAMBIO: Se pasan notas vacías ---
+            notes = ""
 
             # Esta llamada REGISTRA EL PAGO RESTANTE EN CAJA (si aplica)
             self.controller.apply_advance(
@@ -358,25 +401,39 @@ class SupplierAdvancesView:
 
     def _delete_advance(self):
         """Elimina el anticipo seleccionado (y revierte la caja)."""
+        # --- CAMBIO: Se usa self.selected_advance_id en lugar de leer el árbol ---
         adv_id = self.selected_advance_id
         if not adv_id:
             messagebox.showwarning("Sin selección", "Por favor, seleccione un anticipo de la lista.")
             return
 
-        adv = self.controller.get_advance(adv_id)
+        # Se usa self.selected_advance_data que ya se cargó al seleccionar
+        adv = self.selected_advance_data
+        if not adv:
+             # Fallback por si no se seleccionó
+             adv = self.controller.get_advance(adv_id)
+             if not adv:
+                 messagebox.showerror("Error", "No se pudo encontrar el anticipo a eliminar.")
+                 return
+
         if adv['status'] == 'applied':
             messagebox.showerror("Acción denegada", "No se puede eliminar un anticipo que ya fue aplicado.")
             return
             
         if messagebox.askyesno("Confirmar Eliminación", 
-            f"¿Está seguro de eliminar el anticipo ID {adv_id} por S/ {adv['total_amount']:.2f}?\n\n"
-            "¡ADVERTENCIA!\n"
-            "Esta acción creará un INGRESO en la Caja para reversar el gasto original."):
+            f"¿Está seguro de eliminar el anticipo ID {adv_id} por S/ {adv['total_amount']:.2f}?\n\n"):
             
             try:
                 # Esta llamada CREA UN INGRESO EN CAJA
                 self.controller.delete_advance(adv_id)
-                messagebox.showinfo("Éxito", "Anticipo eliminado. Se ha registrado un ingreso en caja para la reversión.")
+                messagebox.showinfo("Éxito", "Anticipo eliminado.")
                 self.refresh_all()
             except Exception as e:
                 messagebox.showerror("Error al eliminar", str(e))
+
+    # --- CAMBIO: Se agregó el método placeholder para el PDF ---
+    def _export_pdf(self):
+        """Placeholder para la futura función de exportar PDF."""
+        messagebox.showinfo("Función no implementada", 
+                            "La generación de reportes PDF para anticipos se implementará a futuro.",
+                            parent=self.parent)

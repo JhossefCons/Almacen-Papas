@@ -150,7 +150,9 @@ class Database:
                 user_id INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 applied_at TEXT,
+                cash_register_id INTEGER,
                 FOREIGN KEY (user_id) REFERENCES users (id)
+                
             )
         ''')
         
@@ -182,6 +184,23 @@ class Database:
                 unit_price REAL NOT NULL,
                 total_value REAL NOT NULL,
                 FOREIGN KEY (credit_sale_id) REFERENCES credit_sales (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Almacena el anticipo (el "préstamo" al proveedor)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS supplier_advances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_name TEXT NOT NULL,
+                date_issued TEXT NOT NULL,
+                total_amount REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'unpaid',
+                notes TEXT,
+                user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                applied_at TEXT,
+                cash_register_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
 

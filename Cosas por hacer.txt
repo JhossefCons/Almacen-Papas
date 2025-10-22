@@ -1,0 +1,12 @@
+editar movimiento en caja
+Se crea el producto, pero no se ve en el inventario
+en nomina se debe cofirmar el salario y poder colocar un nuevo valor, el cual edita el salario de el empleado
+Que no se pueda darle click a los empleados en la tabla de empleados, esta es solo informativa, que muestre el historial de pagos a empleados
+El reporte debe ser bien hecho, asi como el de prestamos a empleados, que abre una ventana y se puede generar y si en esa fecha no se pago nada entonces no aparece nada, eligiendo las fechas y mostrando los pagos a empleados de esas fechas
+En el modulo de prestamos también debe hacerse que pida cuanto se le va a pagar, para poder el editar el salario antes de hacer el pago de nomina
+colocar validaciones, si el empleado paga mas de lo que debe que no deje pagarlo, y que se validen campos vacíos o con tipo de datos erroneos
+En filtros debe aparecer en español
+las fechas no se dejan cambiar el mes, al darle click en la flecha se Cierra el desplegable de elegir fecha
+
+en todas partes donde salen fechas hay dificl darle click a las flechas para cambiarlas
+En ventas ya no debe apararecer otro producto, ventas es la venta de productos, asi que debe reformarce, que aparezcan los productos que hay en inventario con sus calidades

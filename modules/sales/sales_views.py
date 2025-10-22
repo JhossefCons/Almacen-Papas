@@ -326,9 +326,6 @@ class SalesView:
 
             messagebox.showinfo("Venta", "Venta registrada correctamente.")
             self.refresh_all(load_history=True)
-            try:
-                self.parent.event_generate("<<SaleCreated>>", when="tail")
-            except Exception: pass
 
         except ValueError as ve:
             messagebox.showerror("Error de validación", str(ve))

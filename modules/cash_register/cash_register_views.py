@@ -247,7 +247,7 @@ class CashRegisterView:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        # Obtener transacciones
+        # Obtener transacciones (¡esto ya incluye los nuevos anticipos!)
         transactions = self.controller.get_transactions()
 
         # Calcular totales
@@ -261,7 +261,7 @@ class CashRegisterView:
                 total_income += amount
             else:
                 total_expense += amount
-            self._insert_row(trans)
+            self._insert_row(trans) # Llama al método _insert_row corregido
 
         # Resumen
         self._update_summary(total_income, total_expense)
