@@ -184,21 +184,34 @@ class LoansController:
     def add_payment(self, loan_id, payment_date, amount, notes,
                     register_in_cash: bool = True, payment_method: str = "cash",
                     is_payroll_deduction: bool = False):
-        # si quieres que solo admin pueda registrar pagos, descomenta:
-        # if not self.auth_manager.has_permission('admin'):
-        #     raise Exception("Solo los administradores pueden registrar pagos")
-
+        
         if not self.auth_manager.current_user:
-            raise Exception("Usuario no autenticado")
-        if float(amount) <= 0:
-            raise Exception("El monto del pago debe ser mayor a cero")
+            raise PermissionError("Usuario no autenticado")
+
+        try:
+            payment_amount = float(amount)
+        except ValueError:
+            raise ValueError("El monto del pago debe ser un número.")
+            
+        if payment_amount <= 0:
+            raise ValueError("El monto del pago debe ser mayor a cero")
+        
+        if not is_payroll_deduction:
+            summary = self.get_loan_summary(loan_id)
+            if not summary:
+                raise ValueError("No se pudo encontrar el préstamo para validar el saldo.")
+            
+            balance = summary.get('balance', 0.0)
+            
+            if payment_amount > (balance + 0.01):
+                raise ValueError(f"El pago (S/{payment_amount:,.2f}) excede el saldo pendiente (S/{balance:,.2f}).")
 
         pay_id = self.db.execute_query(
             """
             INSERT INTO loan_payments (loan_id, payment_date, amount, notes, user_id, is_payroll_deduction)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (loan_id, payment_date, float(amount), (notes or ""), self.auth_manager.current_user,
+            (loan_id, payment_date, payment_amount, (notes or ""), self.auth_manager.current_user,
              1 if is_payroll_deduction else 0)
         )
 
@@ -207,7 +220,7 @@ class LoansController:
             emp_name = loan.get("employee_display") if loan else "Empleado"
             self.cash.add_transaction(payment_date, "income",
                                       f"Pago préstamo {emp_name}",
-                                      float(amount), payment_method, "prestamo_empleado")
+                                      payment_amount, payment_method, "prestamo_empleado")
 
         self._update_loan_status(loan_id)
         return pay_id

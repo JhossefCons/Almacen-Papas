@@ -11,23 +11,22 @@ class LoginWindow:
         self.result = False
         
         self.root = tk.Tk()
-        self.root.title("PapaSoft - Inicio de Sesión")
+        self.root.title("Distribuidora de papa - Inicio de Sesión")
         self.root.geometry("400x300")
         self.root.resizable(False, False)
         
-        # 👉 Agregar icono a la ventana
+        # --- CAMBIO 1: Cargar el icono PEQUEÑO para la barra de título ---
         try:
             icon_image = Image.open("assets/icons/iconoPapa.png")
-            # Redimensionar manteniendo proporción
             w, h = icon_image.size
-            max_size = 64  # tamaño máximo recomendado para íconos
+            max_size = 64
             scale = min(max_size / w, max_size / h)
             new_w, new_h = int(w * scale), int(h * scale)
             icon_image = icon_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
             self.icon_photo = ImageTk.PhotoImage(icon_image)
             self.root.iconphoto(False, self.icon_photo)
         except Exception as e:
-            print(f"No se pudo cargar el icono de la ventana: {e}")
+            print(f"No se pudo cargar el icono de la ventana (iconoPapa.png): {e}")
         
         self.center_window()
         self.setup_ui()
@@ -52,12 +51,23 @@ class LoginWindow:
         title_frame = ttk.Frame(main_frame)
         title_frame.grid(row=0, column=0, columnspan=2, pady=20)
         
-        # 👉 Usa la misma imagen cargada en __init__: self.icon_photo
-        icon_label = ttk.Label(title_frame, image=self.icon_photo)
-        icon_label.pack(side=tk.LEFT, padx=(0, 10))
+        # --- CAMBIO 2: Cargar el LOGO NUEVO para mostrar DENTRO de la ventana ---
+        try:
+            logo_image = Image.open("assets/icons/logo distribuidora de papa santa lucia.png")
+            w, h = logo_image.size
+            max_size = 250
+            scale = min(max_size / w, max_size / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            logo_image = logo_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            # Guardar en una variable de instancia DIFERENTE
+            self.logo_photo = ImageTk.PhotoImage(logo_image) 
+        except Exception as e:
+            print(f"No se pudo cargar el logo (logo distribuidora...): {e}")
+            self.logo_photo = None # Fallback por si la imagen no carga
 
-        title_label = ttk.Label(title_frame, text="PapaSoft", font=("Arial", 24, "bold"))
-        title_label.pack(side=tk.LEFT)
+        # Usar la nueva variable self.logo_photo
+        icon_label = ttk.Label(title_frame, image=self.logo_photo)
+        icon_label.pack(side=tk.LEFT, padx=(0, 10))
         
         # Campos de formulario
         ttk.Label(main_frame, text="Usuario:").grid(row=1, column=0, sticky=tk.W, pady=5)

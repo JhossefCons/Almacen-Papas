@@ -30,17 +30,20 @@ class EmployeesController:
         rows = self.db.execute_query(q)
         return [dict(r) for r in rows] if rows else []
 
-    def add_employee(self, first_name, last_name, salary):
+    def add_employee(self, first_name, last_name):
         if not self.auth.has_permission("admin"):
             raise Exception("Solo los administradores pueden crear empleados")
         if not first_name or not last_name:
             raise Exception("Nombre y apellido son obligatorios")
-        s = float(salary)
-        if s < 0:
-            raise Exception("El salario no puede ser negativo")
+        # *** CAMBIO: Ya no se valida ni se usa el salario aquí ***
+        # s = float(salary)
+        # if s < 0:
+        #     raise Exception("El salario no puede ser negativo")
+
+        # *** CAMBIO: La consulta INSERT usa el valor DEFAULT (0) para salary ***
         emp_id = self.db.execute_query(
-            "INSERT INTO employees (first_name, last_name, salary) VALUES (?, ?, ?)",
-            (first_name.strip(), last_name.strip(), s)
+            "INSERT INTO employees (first_name, last_name) VALUES (?, ?)",
+            (first_name.strip(), last_name.strip())
         )
         return emp_id
 

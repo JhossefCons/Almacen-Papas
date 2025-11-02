@@ -5,7 +5,8 @@ Controlador para Cuentas por Cobrar (Ventas a Crédito)
 - Permite registrar pagos parciales o totales.
 - Revierte inventario si se elimina una venta a crédito.
 """
-
+# --- CAMBIO: Se añadió la importación de datetime ---
+from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 from modules.inventory.inventory_controller import InventoryController
 from modules.cash_register.cash_register_controller import CashRegisterController
@@ -52,14 +53,12 @@ class CreditSalesController:
             credit_sale_id = cursor.lastrowid
 
             # 2. Insertar items Y DESCONTAR inventario
-            total_sacks_to_consume = 0
             for item in items:
                 product = item['product_name']
                 quality = item['quality']
                 qty = int(item['quantity'])
                 price = float(item['unit_price'])
                 total_val = round(qty * price, 2)
-                total_sacks_to_consume += qty
 
                 # 2a. Insertar el item en la tabla de detalles
                 cursor.execute(
@@ -72,15 +71,14 @@ class CreditSalesController:
                 )
                 
                 # 2b. Descontar del inventario (esto también consume costales implícitamente)
-                # Usamos el controlador de inventario para registrar la SALIDA
                 self.inv.add_inventory_record(
                     date=date_issued,
                     product_name=product,
                     quality=quality,
                     operation="exit",
                     quantity=qty,
-                    unit_price=price, # Usamos el precio de venta para el registro de salida
-                    supplier_customer=customer_name,
+                    unit_price=price, 
+                    supplier_customer=customer_name, # Es una venta, el "cliente" es el customer
                     notes=f"Venta a crédito ID: {credit_sale_id}"
                 )
 
@@ -89,7 +87,6 @@ class CreditSalesController:
 
         except Exception as e:
             conn.rollback()
-            # Si algo falló (ej. no había stock), la transacción se revierte.
             raise e
 
     def delete_credit_sale(self, credit_sale_id: int):
@@ -109,13 +106,14 @@ class CreditSalesController:
             # 1. Revertir el inventario (haciendo una ENTRADA)
             for item in items:
                 self.inv.add_inventory_record(
+                    # --- CAMBIO: 'datetime' ahora está definido gracias a la importación ---
                     date=datetime.now().strftime('%Y-%m-%d'),
                     product_name=item['product_name'],
                     quality=item['quality'],
                     operation="entry", # Operación inversa
                     quantity=item['quantity'],
                     unit_price=0, # Costo 0 porque es una reversión
-                    supplier_customer=item['customer_name'], # El cliente 'devuelve'
+                    supplier_customer="Reversión Venta Crédito", # Se registra como reversión
                     notes=f"Reversión/eliminación venta a crédito ID: {credit_sale_id}"
                 )
             
@@ -144,7 +142,7 @@ class CreditSalesController:
         user_id = self._get_user_id()
         summary = self.get_credit_sale_summary(credit_sale_id)
         
-        if (summary['balance'] - amount) < -0.01: # Permitir un pequeño margen de error
+        if (summary['balance'] - amount) < -0.01: 
             raise ValueError(f"El pago (S/{amount:.2f}) excede el saldo pendiente (S/{summary['balance']:.2f}).")
         
         conn = self.db.connect()
@@ -173,7 +171,7 @@ class CreditSalesController:
             
             # 3. Actualizar estado de la venta si se saldó
             new_balance = summary['balance'] - amount
-            if new_balance < 0.01: # Si el saldo es 0 o muy cercano
+            if new_balance < 0.01:
                 cursor.execute(
                     "UPDATE credit_sales SET status = 'paid', paid_at = ? WHERE id = ?",
                     (payment_date, credit_sale_id)
@@ -183,6 +181,11 @@ class CreditSalesController:
         except Exception as e:
             conn.rollback()
             raise e
+
+    def get_credit_sale(self, credit_sale_id: int) -> Optional[Dict]:
+        """Obtiene la cabecera de una venta a crédito específica."""
+        rows = self.db.execute_query("SELECT * FROM credit_sales WHERE id = ?", (credit_sale_id,))
+        return dict(rows[0]) if rows else None
 
     def get_credit_sale_summary(self, credit_sale_id: int) -> Dict[str, float]:
         """Devuelve el total, pagado y saldo de una venta a crédito."""
@@ -212,7 +215,6 @@ class CreditSalesController:
 
     def get_credit_sale_items(self, credit_sale_id: int) -> List[Dict]:
         """Obtiene los productos de una venta a crédito específica."""
-        # Necesitamos el nombre del cliente para la reversión
         rows = self.db.execute_query(
             """
             SELECT csi.*, cs.customer_name 

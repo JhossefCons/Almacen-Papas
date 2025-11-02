@@ -5,7 +5,6 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 from datetime import datetime
 
-# Se elimina la importación de VALID_COMBOS que causaba el error
 from modules.inventory.inventory_controller import InventoryController
 from modules.cash_register.cash_register_controller import CashRegisterController
 
@@ -74,7 +73,7 @@ class InventoryView:
         self.sale_price_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        self.add_to_cash = tk.BooleanVar(value=False)
+        self.add_to_cash = tk.BooleanVar(value=True)
         ttk.Checkbutton(left, text="Registrar esta compra en Caja", variable=self.add_to_cash).grid(
             row=row, column=0, columnspan=2, sticky=tk.W, pady=(0, 6)
         )
@@ -86,47 +85,41 @@ class InventoryView:
         self.payment_method.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
         row += 1
 
-        ttk.Label(left, text="Proveedor:").grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.supplier_entry = ttk.Entry(left)
-        self.supplier_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        row += 1
+        # --- CAMBIO: Campo de "Proveedor" eliminado ---
+        # ttk.Label(left, text="Proveedor:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        # self.supplier_entry = ttk.Entry(left)
+        # self.supplier_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
+        # row += 1
 
-        ttk.Label(left, text="Notas:").grid(row=row, column=0, sticky=tk.W, pady=2)
-        self.notes_entry = ttk.Entry(left)
-        self.notes_entry.grid(row=row, column=1, sticky=tk.EW, pady=2, padx=(5, 0))
-        row += 1
-
+        # El campo de "Notas" ya estaba eliminado
+        
         btn = ttk.Frame(left)
+        # La fila del botón ahora es 8 (empezando desde 0)
         btn.grid(row=row, column=0, columnspan=2, pady=8, sticky=tk.W)
         ttk.Button(btn, text="Guardar entrada", command=self.add_entry).pack(side=tk.LEFT, padx=(0, 6))
-        # ttk.Button(btn, text="Gráfico mensual", command=self.show_monthly_chart).pack(side=tk.LEFT)
         row += 1
 
         lf_sacks = ttk.LabelFrame(left, text="Costales (empaque)", padding=(6, 6, 6, 6))
         lf_sacks.grid(row=row, column=0, columnspan=2, sticky=tk.EW, padx=0, pady=(6, 0))
         row += 1
 
+        # (El resto del formulario de costales se mantiene igual)
         r2 = 0
         self.sacks_label = ttk.Label(lf_sacks, text="Stock de costales: 0")
         self.sacks_label.grid(row=r2, column=0, columnspan=5, sticky=tk.W, padx=6, pady=(6, 2))
         r2 += 1
-
         ttk.Label(lf_sacks, text="Agregar costales:").grid(row=r2, column=0, sticky=tk.W, padx=6, pady=2)
         self.sacks_add_entry = ttk.Entry(lf_sacks, width=10)
         self.sacks_add_entry.grid(row=r2, column=1, sticky=tk.E, padx=(0, 6), pady=2)
-
         ttk.Label(lf_sacks, text="Precio por costal:").grid(row=r2, column=2, sticky=tk.W, padx=6, pady=2)
         self.sacks_price_entry = ttk.Entry(lf_sacks, width=12)
         self.sacks_price_entry.grid(row=r2, column=3, sticky=tk.E, padx=(0, 6), pady=2)
-
-        self.sacks_register_cash = tk.BooleanVar(value=False)
+        self.sacks_register_cash = tk.BooleanVar(value=True)
         ttk.Checkbutton(lf_sacks, text="Registrar compra en Caja", variable=self.sacks_register_cash)\
             .grid(row=r2, column=4, sticky=tk.W, padx=(4, 6), pady=2)
         r2 += 1
-
         ttk.Button(lf_sacks, text="Agregar costales", command=self.add_sacks_click)\
             .grid(row=r2, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(4, 8))
-
         ttk.Label(lf_sacks, text="Ajustar stock a:").grid(row=r2, column=2, sticky=tk.E, padx=6, pady=(4, 8))
         self.sacks_set_entry = ttk.Entry(lf_sacks, width=10, state=("normal" if self.is_admin else "disabled"))
         self.sacks_set_entry.grid(row=r2, column=3, sticky=tk.W, padx=(0, 6), pady=(4, 8))
@@ -137,68 +130,53 @@ class InventoryView:
         for c in (0, 1): left.grid_columnconfigure(c, weight=1)
         for c in range(5): lf_sacks.grid_columnconfigure(c, weight=1)
 
+        # (El resto del _build_ui para el panel derecho se mantiene igual)
         style = ttk.Style()
         style.configure("Inv.Treeview", rowheight=22)
         style.configure("Inv.Treeview.Heading", font=("Segoe UI", 9, "bold"))
-
         stock_frame = ttk.LabelFrame(right, text="Stock actual")
         stock_frame.pack(fill=tk.BOTH, expand=True)
-
         cols = ("product_name", "quality", "price", "stock")
         self.stock_tree = ttk.Treeview(stock_frame, columns=cols, show="headings", height=12, style="Inv.Treeview")
-
         stock_y = ttk.Scrollbar(stock_frame, orient="vertical", command=self.stock_tree.yview)
         stock_x = ttk.Scrollbar(stock_frame, orient="horizontal", command=self.stock_tree.xview)
         self.stock_tree.configure(yscrollcommand=stock_y.set, xscrollcommand=stock_x.set)
-
         self.stock_tree.grid(row=0, column=0, sticky="nsew")
         stock_y.grid(row=0, column=1, sticky="ns")
         stock_x.grid(row=1, column=0, sticky="ew")
-
         stock_frame.grid_rowconfigure(0, weight=1)
         stock_frame.grid_columnconfigure(0, weight=1)
-
         self.stock_tree.heading("product_name", text="Producto")
         self.stock_tree.heading("quality", text="Calidad")
         self.stock_tree.heading("price", text="Precio ref.")
         self.stock_tree.heading("stock", text="Bultos disponibles")
-
         self.stock_tree.column("product_name", width=160, anchor=tk.W)
         self.stock_tree.column("quality", width=140, anchor=tk.W)
         self.stock_tree.column("price", width=110, anchor=tk.E)
         self.stock_tree.column("stock", width=150, anchor=tk.CENTER)
-
         self.stock_tree.tag_configure("zero", foreground="gray")
         self.stock_tree.tag_configure("odd", background="#f7f7f7")
         self.stock_tree.bind("<Double-1>", self._on_stock_dblclick)
-
         actions = ttk.Frame(stock_frame)
         actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.edit_btn = ttk.Button(actions, text="Editar seleccionado (admin)",
                                    command=self._edit_selected,
                                    state=("normal" if self.is_admin else "disabled"))
         self.edit_btn.pack(side=tk.LEFT)
-        
         self.total_label = ttk.Label(stock_frame, text="Total de bultos: 0", font=("Segoe UI", 9, "bold"))
         self.total_label.grid(row=3, column=0, columnspan=2, sticky="e", pady=(6, 0))
-
         val_frame = ttk.LabelFrame(right, text="Valorización del inventario (simplificada)")
         val_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
-
         vcols = ("product_name", "quality", "stock", "avg_cost", "ref_price", "gain_total")
         self.valuation_tree = ttk.Treeview(val_frame, columns=vcols, show="headings", height=10, style="Inv.Treeview")
-
         val_y = ttk.Scrollbar(val_frame, orient="vertical", command=self.valuation_tree.yview)
         val_x = ttk.Scrollbar(val_frame, orient="horizontal", command=self.valuation_tree.xview)
         self.valuation_tree.configure(yscrollcommand=val_y.set, xscrollcommand=val_x.set)
-
         self.valuation_tree.grid(row=0, column=0, sticky="nsew")
         val_y.grid(row=0, column=1, sticky="ns")
         val_x.grid(row=1, column=0, sticky="ew")
-
         val_frame.grid_rowconfigure(0, weight=1)
         val_frame.grid_columnconfigure(0, weight=1)
-
         headers = {
             "product_name": "Producto", "quality": "Calidad", "stock": "Bultos",
             "avg_cost": "Costo compra", "ref_price": "Precio venta", "gain_total": "Ganancias Totales"
@@ -211,17 +189,15 @@ class InventoryView:
             if c == "stock": anchor = tk.CENTER
             elif c not in ("product_name", "quality"): anchor = tk.E
             self.valuation_tree.column(c, width=widths[c], anchor=anchor)
-
         self.valuation_tree.tag_configure("odd", background="#f7f7f7")
-
         ttk.Label(
             right,
             text="Nota: las ventas se registran en la pestaña 'Ventas' y actualizan este stock automáticamente.",
             foreground="gray"
         ).pack(anchor=tk.W, padx=2, pady=(6, 2))
 
+    # (Los métodos _load_product_list, _on_type_selected, _auto_fill_prices, etc. se mantienen igual)
     def _load_product_list(self):
-        """Carga los productos y calidades desde el controlador."""
         self.products_data = self.controller.get_all_products()
         product_names = sorted(list(self.products_data.keys()))
         self.type_cb['values'] = product_names
@@ -234,7 +210,6 @@ class InventoryView:
             self.quality_cb['values'] = []
 
     def _on_type_selected(self, _evt=None):
-        """Al seleccionar un producto, carga sus calidades."""
         selected_product = self.type_cb.get()
         qualities = self.products_data.get(selected_product, [])
         self.quality_cb['values'] = qualities
@@ -261,12 +236,10 @@ class InventoryView:
             self.purchase_price_entry.delete(0, tk.END)
             self.sale_price_entry.delete(0, tk.END)
             return
-
         p_buy = self.controller.get_last_purchase_price(t, q)
         self.purchase_price_entry.delete(0, tk.END)
         if p_buy is not None:
             self.purchase_price_entry.insert(0, f"{p_buy:.2f}")
-
         p_sell = self.controller.get_reference_price(t, q)
         self.sale_price_entry.delete(0, tk.END)
         if p_sell is not None:
@@ -290,25 +263,20 @@ class InventoryView:
             amount_str = (self.sacks_add_entry.get() or "").strip()
             if not amount_str: raise ValueError("Ingrese la cantidad de costales a agregar.")
             amount = int(amount_str)
-
             price_str = (self.sacks_price_entry.get() or "").strip()
             price = float(price_str) if price_str else None
-
             if self.sacks_register_cash.get() and price is None:
                 raise ValueError("Ingrese el precio por costal para registrar en Caja.")
-
             self.controller.add_sacks(amount, price)
-
             if self.sacks_register_cash.get():
                 total = round(amount * price, 2)
                 pay_method = PAY_TO_CODE[self.payment_method.get()]
                 date = self.date_entry.get_date().strftime("%Y-%m-%d")
                 desc = f"Compra de costales ({amount} uds)"
                 self.cash.add_transaction(date, "expense", desc, total, pay_method, "empaque")
-
             self.sacks_add_entry.delete(0, tk.END)
             self.sacks_price_entry.delete(0, tk.END)
-            self.sacks_register_cash.set(False)
+            self.sacks_register_cash.set(True) # Mantener en True
             self.refresh_sacks_label()
             messagebox.showinfo("Costales", "Costales agregados correctamente.")
         except (ValueError, TypeError) as ve:
@@ -336,37 +304,66 @@ class InventoryView:
         self.qty_entry.delete(0, tk.END)
         self.purchase_price_entry.delete(0, tk.END)
         self.sale_price_entry.delete(0, tk.END)
-        self.supplier_entry.delete(0, tk.END)
-        self.notes_entry.delete(0, tk.END)
+        # --- CAMBIO: Línea de 'supplier_entry' eliminada ---
+        # self.supplier_entry.delete(0, tk.END)
         self.payment_method.set("Efectivo")
-        self.add_to_cash.set(False)
+        self.add_to_cash.set(True) # Mantener en True
         self._load_product_list()
 
     def add_entry(self):
         try:
             date = self.date_entry.get_date().strftime("%Y-%m-%d")
+            
+            # --- Validaciones de Producto/Calidad ---
             t = self.type_cb.get().strip()
             q = self.quality_cb.get().strip()
+            if not t or not q: 
+                raise ValueError("Debe seleccionar un 'Producto' y una 'Calidad'.")
 
-            if not t or not q: raise ValueError("Debe ingresar un producto y una calidad.")
-
+            # --- Validación de Cantidad (bultos) ---
             qty_str = (self.qty_entry.get() or "").strip()
-            if not qty_str: raise ValueError("Ingrese la cantidad de bultos.")
-            qty = int(qty_str)
+            if not qty_str: 
+                raise ValueError("Debe ingresar la 'Cantidad (bultos)'.")
+            try:
+                qty = int(qty_str)
+                if qty <= 0:
+                    raise ValueError("La 'Cantidad (bultos)' debe ser un número positivo.")
+            except ValueError:
+                raise ValueError("La 'Cantidad (bultos)' debe ser un número entero válido.")
 
+            # --- Validación de Precio de Compra (costo) ---
             p_buy_str = (self.purchase_price_entry.get() or "").strip()
-            if not p_buy_str: raise ValueError("Ingrese el precio de compra.")
-            p_buy = float(p_buy_str)
+            if not p_buy_str: 
+                raise ValueError("Debe ingresar el 'Precio de compra (costo)'.")
+            try:
+                p_buy = float(p_buy_str)
+                if p_buy < 0: # Permitimos 0 por si es un ajuste, pero no negativo
+                    raise ValueError("El 'Precio de compra' no puede ser negativo.")
+            except ValueError:
+                raise ValueError("El 'Precio de compra' debe ser un número válido (ej. 20000).")
 
+            # --- Validación de Precio de Venta (referencia) ---
             p_sell_str = (self.sale_price_entry.get() or "").strip()
-            p_sell = float(p_sell_str) if p_sell_str else 0.0
+            if not p_sell_str:
+                raise ValueError("Debe ingresar el 'Precio de venta (referencia)'.")
+            try:
+                p_sell = float(p_sell_str)
+                if p_sell < 0:
+                    raise ValueError("El 'Precio de venta' no puede ser negativo.")
+            except ValueError:
+                 raise ValueError("El 'Precio de venta' debe ser un número válido (ej. 30000).")
 
-            supplier = (self.supplier_entry.get() or "").strip()
-            notes = (self.notes_entry.get() or "").strip()
+            # --- Obtener datos opcionales (ya eliminados, se pasan vacíos) ---
+            supplier = ""
+            notes = ""
 
+            # Llamada al controlador (ya tiene sus propias validaciones de lógica)
             self.controller.add_inventory_record(date, t, q, "entry", qty, p_buy, supplier, notes)
+            
+            # Guardar el precio de venta de referencia
             self.controller.set_reference_price(t, q, p_sell)
 
+            # Registrar en caja si está marcado
             if self.add_to_cash.get():
                 total = round(qty * p_buy, 2)
                 pay = PAY_TO_CODE[self.payment_method.get()]
@@ -374,13 +371,17 @@ class InventoryView:
                 self.cash.add_transaction(date, "expense", desc, total, pay, "compra_inventario")
 
             messagebox.showinfo("Inventario", "Entrada registrada correctamente.")
-            self.refresh_all()
-            self._reset_form()
+            self.refresh_all() # Actualizar tablas
+            self._reset_form() # Limpiar formulario
+            
         except (ValueError, TypeError) as ve:
-            messagebox.showerror("Error de datos", str(ve))
+            # Captura todas las validaciones (ValueError) y errores de tipo (TypeError)
+            messagebox.showerror("Error de datos", str(ve), parent=self.parent)
         except Exception as e:
-            messagebox.showerror("Error inesperado", str(e))
+            # Captura errores inesperados (ej. de la base de datos)
+            messagebox.showerror("Error inesperado", str(e), parent=self.parent)
 
+    # (El resto de los métodos: refresh_stock_table, refresh_valuation_table, _edit_selected, etc. se mantienen igual)
     def refresh_stock_table(self):
         for item in self.stock_tree.get_children(): self.stock_tree.delete(item)
         rows = self.controller.get_stock_matrix()
@@ -405,14 +406,12 @@ class InventoryView:
             stock = int(r["stock"])
             avg_cost = r["avg_cost"]
             ref_price = r["ref_price"]
-
             if avg_cost is None or ref_price is None:
                 gain_text = "-"
             else:
                 sack_price = self.controller.get_sack_price()
                 gain_total = stock * (ref_price - avg_cost - sack_price)
                 gain_text = f"{gain_total:,.2f}"
-
             self.valuation_tree.insert("", tk.END,
                 values=(
                     r["product_name"], r["quality"], stock,
@@ -437,7 +436,6 @@ class InventoryView:
             return
         vals = self.stock_tree.item(sel[0], "values")
         product_name, quality, price_str, stock = vals[0], vals[1], vals[2], int(vals[3])
-
         dlg = tk.Toplevel(self.parent)
         dlg.title(f"Editar {product_name} - {quality}")
         dlg.geometry("360x230")
@@ -445,31 +443,24 @@ class InventoryView:
         dlg.grab_set()
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
-
         ttk.Label(frm, text="Producto:").grid(row=0, column=0, sticky=tk.W, pady=4)
         ttk.Label(frm, text=product_name).grid(row=0, column=1, sticky=tk.W, pady=4)
-
         ttk.Label(frm, text="Calidad:").grid(row=1, column=0, sticky=tk.W, pady=4)
         ttk.Label(frm, text=quality).grid(row=1, column=1, sticky=tk.W, pady=4)
-
         ttk.Label(frm, text="Precio ref. (venta):").grid(row=2, column=0, sticky=tk.W, pady=4)
         price_entry = ttk.Entry(frm, width=18)
         price_entry.insert(0, price_str)
         price_entry.grid(row=2, column=1, sticky=tk.EW, pady=4)
-
         ttk.Label(frm, text="Bultos (stock):").grid(row=3, column=0, sticky=tk.W, pady=4)
         stock_entry = ttk.Entry(frm, width=18)
         stock_entry.insert(0, str(stock))
         stock_entry.grid(row=3, column=1, sticky=tk.EW, pady=4)
-
         note_var = tk.StringVar()
         ttk.Label(frm, text="Nota (opcional):").grid(row=4, column=0, sticky=tk.W, pady=4)
         note_entry = ttk.Entry(frm, textvariable=note_var)
         note_entry.grid(row=4, column=1, sticky=tk.EW, pady=4)
-
         btns = ttk.Frame(frm)
         btns.grid(row=5, column=0, columnspan=2, pady=(10, 0))
-
         def save_changes():
             try:
                 new_price = float(price_entry.get())
@@ -486,13 +477,6 @@ class InventoryView:
                 messagebox.showerror("Error de datos", str(ve))
             except Exception as e:
                 messagebox.showerror("Error inesperado", str(e))
-
         ttk.Button(btns, text="Guardar", command=save_changes).pack(side=tk.LEFT, padx=6)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         frm.columnconfigure(1, weight=1)
-
-    # def show_monthly_chart(self):
-    #     # La lógica de este gráfico debería adaptarse para manejar múltiples productos.
-    #     # Por ahora, se puede dejar comentada para evitar errores.
-    #     messagebox.showinfo("Gráfico", "Funcionalidad de gráfico en desarrollo.")
-    #     pass

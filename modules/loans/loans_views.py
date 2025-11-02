@@ -18,6 +18,13 @@ from modules.loans.loans_controller import LoansController
 
 PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
 
+LOAN_STATUS_ES_TO_EN = {
+    "Todos": None,
+    "Activo": "active",
+    "Pagado": "paid",
+    "Vencido": "overdue"
+}
+
 
 class LoansView:
     def __init__(self, parent, database, auth_manager):
@@ -190,8 +197,8 @@ class LoansView:
         filters.pack(fill=tk.X, pady=(8, 0))
 
         ttk.Label(filters, text="Estado:").pack(side=tk.LEFT)
-        self.status_filter = ttk.Combobox(filters, state="readonly", values=("", "active", "paid", "overdue"), width=12)
-        self.status_filter.set("")
+        self.status_filter = ttk.Combobox(filters, state="readonly", values=list(LOAN_STATUS_ES_TO_EN.keys()), width=12)
+        self.status_filter.set("Todos")
         self.status_filter.pack(side=tk.LEFT, padx=6)
 
         ttk.Label(filters, text="Empleado:").pack(side=tk.LEFT)
@@ -276,7 +283,8 @@ class LoansView:
         return {'active': 'Activo', 'paid': 'Pagado', 'overdue': 'Vencido'}.get(status, status)
 
     def apply_filters(self):
-        st = self.status_filter.get() or None
+        st_es = self.status_filter.get() or "Todos"
+        st = LOAN_STATUS_ES_TO_EN.get(st_es)
         emp = self.employee_filter.get() or None
         self.load_loans(st, emp)
 
@@ -373,6 +381,15 @@ class LoansView:
         if not sel:
             messagebox.showwarning("Advertencia", "Seleccione un préstamo para registrar pago")
             return
+        item_values = self.loans_tree.item(sel[0])['values']
+        status = item_values[6] 
+        
+        if status == "Pagado":
+            messagebox.showinfo("Préstamo Pagado", 
+                                "Este préstamo ya ha sido saldado. No se pueden registrar más pagos.",
+                                parent=self.parent)
+            return
+        
         loan_id = self.loans_tree.item(sel[0])['values'][0]
         employee = self.loans_tree.item(sel[0])['values'][1]
 
@@ -409,19 +426,35 @@ class LoansView:
         def do_register():
             try:
                 date = date_entry.get_date().strftime('%Y-%m-%d')
-                amount = float(amount_entry.get())
+                
+                # --- CAMBIO: Validación de campos vacíos y tipo de dato ---
+                amount_str = amount_entry.get().strip()
+                if not amount_str:
+                    raise ValueError("El campo 'Monto' no puede estar vacío.")
+                
+                try:
+                    amount = float(amount_str)
+                except ValueError:
+                    raise ValueError("El 'Monto' debe ser un número válido (ej. 50000 o 50.50).")
+                # --- FIN DEL CAMBIO ---
+
                 notes = notes_entry.get()
                 reg = reg_var.get()
                 method = PAY_TO_CODE[method_cb.get()]
+
+                # El controlador (add_payment) ahora validará si amount > balance
                 self.controller.add_payment(loan_id, date, amount, notes, register_in_cash=reg, payment_method=method)
+                
                 messagebox.showinfo("Pago", "Pago registrado.")
                 win.destroy()
                 self.load_loans()
                 self.update_alerts()
-            except ValueError:
-                messagebox.showerror("Error", "Monto inválido")
+
+            # --- CAMBIO: Capturar (ValueError, PermissionError) para mostrar el mensaje en el diálogo ---
+            except (ValueError, PermissionError) as e:
+                messagebox.showerror("Error de Validación", str(e), parent=win)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=win)
 
         btns = ttk.Frame(main)
         btns.grid(row=5, column=0, columnspan=2, pady=10)
@@ -429,6 +462,7 @@ class LoansView:
         ttk.Button(btns, text="Cancelar", command=win.destroy).pack(side=tk.LEFT, padx=5)
 
         main.columnconfigure(1, weight=1)
+        amount_entry.focus()
 
     # -----------------------------
     # NÓMINA

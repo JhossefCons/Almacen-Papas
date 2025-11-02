@@ -156,6 +156,30 @@ class Database:
             )
         ''')
         
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS payroll_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                payment_date TEXT NOT NULL,
+                period_year INTEGER NOT NULL,
+                period_month INTEGER NOT NULL,
+                gross_salary_paid REAL NOT NULL, -- Salario base usado para este pago específico
+                loan_deductions REAL NOT NULL DEFAULT 0, -- Total deducido por préstamos
+                net_paid REAL NOT NULL, -- Monto neto realmente pagado
+                cash_register_id_payment INTEGER, -- FK a caja (egreso neto)
+                cash_register_id_deduction INTEGER, -- FK a caja (ingreso deducción)
+                user_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees (id),
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Añadir índice para búsquedas por fecha y empleado
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_payroll_hist_date_emp ON payroll_history (payment_date, employee_id)
+        ''')
+        
         # Almacena la "aplicación" (el cruce con una compra)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS supplier_advance_apps (

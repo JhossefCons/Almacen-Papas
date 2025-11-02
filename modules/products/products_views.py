@@ -92,32 +92,46 @@ class ProductsView:
 
     def add_product(self):
         name = self.name_entry.get()
-        qualities = self.qualities_entry.get().split(',')
+        # *** CAMBIO: Limpiar y ordenar calidades antes de enviar al controller ***
+        qualities_raw = self.qualities_entry.get().split(',')
+        qualities_clean = sorted([q.strip().capitalize() for q in qualities_raw if q.strip()])
+
         try:
-            self.controller.create_product(name, qualities)
+            # El controlador ya hace la validación de no vacío
+            self.controller.create_product(name, qualities_clean)
             messagebox.showinfo("Éxito", "Producto agregado correctamente.")
             self.load_products()
-            self.parent.event_generate("<<ProductsChanged>>")
+            # *** CAMBIO: Notificar a MainWindow para que refresque otras vistas si es necesario ***
+            # (Aunque con el refresco por clic, esto es menos crítico ahora)
+            self.parent.winfo_toplevel().event_generate("<<ProductsChanged>>")
         except (ValueError, PermissionError) as e:
             messagebox.showerror("Error", str(e))
+        except Exception as e: # Captura genérica por si acaso
+             messagebox.showerror("Error Inesperado", f"No se pudo agregar el producto: {e}")
 
     def update_product(self):
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("Sin selección", "Por favor, seleccione un producto para actualizar.")
             return
-            
+
         product_id = self.tree.item(selected[0])['values'][0]
         name = self.name_entry.get()
-        qualities = self.qualities_entry.get().split(',')
-        
+        # *** CAMBIO: Limpiar y ordenar calidades antes de enviar al controller ***
+        qualities_raw = self.qualities_entry.get().split(',')
+        qualities_clean = sorted([q.strip().capitalize() for q in qualities_raw if q.strip()])
+
         try:
-            self.controller.update_product(product_id, name, qualities)
+            # El controlador ya hace la validación de no vacío
+            self.controller.update_product(product_id, name, qualities_clean)
             messagebox.showinfo("Éxito", "Producto actualizado correctamente.")
             self.load_products()
-            self.parent.event_generate("<<ProductsChanged>>")
+            # *** CAMBIO: Notificar a MainWindow ***
+            self.parent.winfo_toplevel().event_generate("<<ProductsChanged>>")
         except (ValueError, PermissionError) as e:
             messagebox.showerror("Error", str(e))
+        except Exception as e: # Captura genérica
+             messagebox.showerror("Error Inesperado", f"No se pudo actualizar el producto: {e}")
             
     def delete_product(self):
         selected = self.tree.selection()

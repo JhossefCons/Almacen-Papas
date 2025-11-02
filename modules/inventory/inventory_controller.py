@@ -19,12 +19,16 @@ class InventoryController:
         """
         Devuelve un diccionario de todos los productos y sus calidades
         desde la tabla de productos definidos.
+        Ej: {'Parda': ['Primera', 'Segunda'], 'Amarilla': ['Unica']}
         """
         rows = self.db.execute_query("SELECT name, qualities FROM products ORDER BY name")
         products = {}
         if rows:
             for row in rows:
-                products[row["name"]] = row["qualities"].split(',')
+                # Asegura que las calidades estén limpias y capitalizadas
+                clean_qualities = sorted([q.strip().capitalize() for q in row["qualities"].split(',') if q.strip()])
+                if clean_qualities: # Solo añade si hay calidades válidas
+                    products[row["name"]] = clean_qualities
         return products
 
     # ------------------------------
@@ -40,30 +44,6 @@ class InventoryController:
     def _require_admin(self):
         if not getattr(self.auth, "has_permission", None) or not self.auth.has_permission("admin"):
             raise PermissionError("Solo el usuario administrador puede realizar esta acción")
-
-    # ------------------------------
-    # Consultas dinámicas de productos
-    # ------------------------------
-    def get_all_products(self) -> Dict[str, List[str]]:
-        """
-        Devuelve un diccionario de todos los productos y sus calidades únicas desde la BD.
-        Ej: {'Parda': ['Primera', 'Segunda'], 'Amarilla': ['Unica']}
-        """
-        rows = self.db.execute_query(
-            "SELECT DISTINCT LOWER(product_name) as name, LOWER(quality) as quality FROM inventory_movements ORDER BY name, quality"
-        )
-        products = {}
-        if not rows:
-            return {}
-        for row in rows:
-            name_key = row['name'].capitalize()
-            quality_val = row['quality'].capitalize()
-            if name_key not in products:
-                products[name_key] = []
-            if quality_val not in products[name_key]:
-                products[name_key].append(quality_val)
-        return products
-
     # ------------------------------
     # Precio de referencia por combinación (venta)
     # ------------------------------
@@ -173,7 +153,7 @@ class InventoryController:
     def add_inventory_record(
         self, date: str, product_name: str, quality: str, operation: str,
         quantity: int, unit_price: float, supplier_customer: str, notes: str = "",
-    ) -> int:
+        ) -> int:
         if not self.auth.current_user:
             raise Exception("Usuario no autenticado")
 
@@ -183,15 +163,27 @@ class InventoryController:
         if quantity <= 0 or unit_price < 0:
             raise ValueError("Cantidad y precio deben ser positivos")
 
+        # --- INICIO DEL CAMBIO ---
+        # Determinar si es una salida real (venta) o un ajuste
+        # Los ajustes no deben consumir costales.
+        is_adjustment = (supplier_customer or "").strip().lower() == "ajuste"
+
         if operation == "exit":
             current_stock = self.get_current_stock(product_name, quality)
             if current_stock < quantity:
                 raise ValueError(f"Stock insuficiente para {product_name} {quality}. Stock actual: {current_stock}")
-            if self.get_sacks_count() < quantity:
-                raise ValueError(f"No hay suficientes costales para la venta ({quantity} requeridos).")
+            
+            # Solo verificar y consumir costales si NO es un ajuste
+            if not is_adjustment:
+                if self.get_sacks_count() < quantity:
+                    raise ValueError(f"No hay suficientes costales (empaques) para la venta ({quantity} requeridos). Stock: {self.get_sacks_count()}")
+        # --- FIN DEL CAMBIO ---
 
         total_value = round(quantity * float(unit_price), 2)
-        user_id_val = self.auth.current_user["id"]
+        if isinstance(self.auth.current_user, dict):
+            user_id_val = self.auth.current_user.get("id")
+        else:
+            user_id_val = self.auth.current_user
 
         insert_sql = """
             INSERT INTO inventory_movements
@@ -207,7 +199,8 @@ class InventoryController:
 
         new_id = self.db.execute_query(insert_sql, params)
 
-        if operation == "exit":
+        # --- CAMBIO: Solo consumir costales si es una salida Y NO es un ajuste ---
+        if operation == "exit" and not is_adjustment:
             self.consume_sacks(quantity)
 
         return int(new_id)

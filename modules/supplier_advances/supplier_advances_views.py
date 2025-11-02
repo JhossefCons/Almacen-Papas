@@ -12,6 +12,18 @@ from tkcalendar import DateEntry
 from datetime import datetime, timedelta
 from modules.supplier_advances.supplier_advances_controller import SupplierAdvancesController
 
+# --- CAMBIO: Importaciones para PDF ---
+try:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
+# --- FIN CAMBIO ---
+
 PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
 
 class SupplierAdvancesView:
@@ -111,15 +123,12 @@ class SupplierAdvancesView:
         self.app_payment_cb = ttk.Combobox(self.lf_app, state="readonly", values=list(PAY_TO_CODE.keys()), width=12)
         self.app_payment_cb.set("Efectivo")
         self.app_payment_cb.grid(row=6, column=1, sticky=tk.W, padx=5)
-
-        # --- CAMBIO: Se eliminó el campo de Notas de Compra ---
         
         self.apply_adv_btn = ttk.Button(self.lf_app, text="Aplicar a Compra", command=self._apply_purchase)
-        # Se movió el botón a la fila 7 (antes 8)
         self.apply_adv_btn.grid(row=7, column=0, columnspan=2, pady=10)
         
         self.lf_app.columnconfigure(1, weight=1)
-        self._toggle_application_form(False) # Deshabilitado al inicio
+        self._toggle_application_form(False)
 
     def _build_right_panel_history(self, parent):
         """Construye el historial (filtros y árbol) en el panel derecho."""
@@ -130,17 +139,20 @@ class SupplierAdvancesView:
         self.start_de = DateEntry(filters, date_pattern='yyyy-mm-dd', width=12)
         self.start_de.set_date(datetime.now() - timedelta(days=30))
         self.start_de.grid(row=0, column=1, sticky=tk.W, padx=(4, 12))
+        self.start_de.bind("<<DateEntrySelected>>", lambda e: self._load_advances_list())
 
         ttk.Label(filters, text="Hasta:").grid(row=0, column=2, sticky=tk.W, pady=2)
         self.end_de = DateEntry(filters, date_pattern='yyyy-mm-dd', width=12)
         self.end_de.set_date(datetime.now())
         self.end_de.grid(row=0, column=3, sticky=tk.W, padx=(4, 12))
+        self.end_de.bind("<<DateEntrySelected>>", lambda e: self._load_advances_list())
 
         ttk.Label(filters, text="Estado:").grid(row=0, column=4, sticky=tk.W, pady=2)
         self.status_cb = ttk.Combobox(filters, state="readonly", width=14, 
                                       values=["Todos", "Pendientes", "Aplicados"])
         self.status_cb.set("Pendientes")
         self.status_cb.grid(row=0, column=5, sticky=tk.W, padx=(4, 12))
+        self.status_cb.bind("<<ComboboxSelected>>", lambda e: self._load_advances_list())
         
         self.apply_filter_btn = ttk.Button(filters, text="Buscar", command=self._load_advances_list)
         self.apply_filter_btn.grid(row=0, column=6, padx=(8, 4))
@@ -148,7 +160,6 @@ class SupplierAdvancesView:
         self.delete_adv_btn = ttk.Button(filters, text="Eliminar Anticipo", command=self._delete_advance)
         self.delete_adv_btn.grid(row=0, column=7, padx=4)
 
-        # --- CAMBIO: Se agregó el botón de Reporte PDF ---
         self.report_adv_btn = ttk.Button(filters, text="Reporte PDF", command=self._export_pdf)
         self.report_adv_btn.grid(row=0, column=8, padx=4)
 
@@ -156,7 +167,6 @@ class SupplierAdvancesView:
         tree_frame = ttk.Frame(parent, padding=(0, 10, 0, 0))
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        # --- CAMBIO: Se agregó la columna 'notes' ---
         columns = ('id', 'date', 'supplier', 'total', 'status', 'applied_at', 'notes')
         self.tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=18)
         
@@ -171,7 +181,6 @@ class SupplierAdvancesView:
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
 
-        # --- CAMBIO: Se agregaron headers y widths para 'notes' ---
         headers = {
             'id': 'ID', 'date': 'Fecha', 'supplier': 'Proveedor', 'total': 'Monto',
             'status': 'Estado', 'applied_at': 'Fecha Aplic.', 'notes': 'Nota Anticipo'
@@ -179,12 +188,9 @@ class SupplierAdvancesView:
         widths = {'id': 40, 'date': 90, 'supplier': 200, 'total': 100, 'status': 80, 'applied_at': 90, 'notes': 250}
         
         for c in columns:
-            # Se ajustó el anclaje para 'notes'
             anchor = tk.W 
-            if c == 'total':
-                anchor = tk.E
-            elif c in ('id', 'date', 'status', 'applied_at'):
-                anchor = tk.CENTER
+            if c == 'total': anchor = tk.E
+            elif c in ('id', 'date', 'status', 'applied_at'): anchor = tk.CENTER
             self.tree.heading(c, text=headers[c])
             self.tree.column(c, width=widths[c], anchor=anchor, stretch=True)
 
@@ -212,16 +218,18 @@ class SupplierAdvancesView:
             start = self.start_de.get_date().strftime('%Y-%m-%d')
             end = self.end_de.get_date().strftime('%Y-%m-%d')
             status_map = {"Pendientes": "unpaid", "Aplicados": "applied", "Todos": "all"}
-            status = status_map.get(self.status_cb.get(), "all")
+            self.status_map_es = {"unpaid": "Pendiente", "applied": "Aplicado"} # Para el PDF
+            self.current_status_filter_es = self.status_cb.get()
+            
+            status = status_map.get(self.current_status_filter_es, "all")
             
             advances = self.controller.get_all_advances(start, end, status)
             
             for i, adv in enumerate(advances):
-                status_text = "Aplicado" if adv['status'] == 'applied' else "Pendiente"
+                status_text = self.status_map_es.get(adv['status'], adv['status'])
                 tag = "applied_status" if adv['status'] == 'applied' else "unpaid_status"
                 tags = (tag, "oddrow") if i % 2 else (tag,)
 
-                # --- CAMBIO: Se agregó adv['notes'] a los valores ---
                 self.tree.insert("", tk.END, iid=adv['id'], values=(
                     adv['id'],
                     adv['date_issued'],
@@ -245,7 +253,6 @@ class SupplierAdvancesView:
     def _save_advance(self):
         """Guarda el nuevo anticipo y actualiza la Caja."""
         try:
-            # --- CAMBIO: Validación de Proveedor ---
             supplier = self.supplier_entry.get().strip()
             if not supplier:
                 messagebox.showerror("Dato Vacío", "El nombre del 'Proveedor' no puede estar vacío.")
@@ -253,7 +260,6 @@ class SupplierAdvancesView:
 
             date = self.adv_date_entry.get_date().strftime('%Y-%m-%d')
 
-            # --- CAMBIO: Validación de Monto (número y > 0) ---
             try:
                 amount_str = self.adv_amount_entry.get().strip()
                 if not amount_str:
@@ -268,12 +274,11 @@ class SupplierAdvancesView:
             method = PAY_TO_CODE[self.adv_payment_cb.get()]
             notes = self.adv_notes_entry.get().strip()
 
-            # Esta llamada REGISTRA EL EGRESO EN CAJA
             self.controller.create_advance(supplier, date, amount, notes, method)
             
             messagebox.showinfo("Éxito", "Anticipo registrado. Se ha creado un egreso en caja.")
             self._clear_advance_form()
-            self._load_advances_list() # Recargar el historial
+            self._load_advances_list()
             
         except (ValueError, PermissionError) as e:
             messagebox.showerror("Error de validación", str(e))
@@ -300,7 +305,6 @@ class SupplierAdvancesView:
             amount = float(self.selected_advance_data['total_amount'])
             status = self.selected_advance_data['status']
             
-            # Actualizar formulario de aplicación
             self.lf_app.config(text=f"Aplicar Anticipo ID: {self.selected_advance_id}")
             self.selected_adv_label.config(text=f"Proveedor: {supplier}")
             self.app_adv_amount_lbl.config(text=f"Anticipo a Aplicar: S/ {amount:.2f}")
@@ -351,8 +355,6 @@ class SupplierAdvancesView:
         self.lf_app.config(text="Aplicar a Compra (Seleccione un anticipo)")
         self.selected_adv_label.config(text="Anticipo: N/A")
         self.app_purchase_total_entry.delete(0, tk.END)
-        # --- CAMBIO: Se eliminó la limpieza del campo de notas ---
-        # self.app_notes_entry.delete(0, tk.END)
         self.app_payment_cb.set("Efectivo")
         self.app_adv_amount_lbl.config(text="Anticipo a Aplicar: S/ 0.00")
         self.app_remaining_lbl.config(text="Restante a Pagar: S/ 0.00", foreground="black")
@@ -367,7 +369,6 @@ class SupplierAdvancesView:
         try:
             app_date = self.app_date_entry.get_date().strftime('%Y-%m-%d')
             
-            # --- CAMBIO: Validación de Total Compra (número y > 0) ---
             try:
                 purchase_total_str = self.app_purchase_total_entry.get().strip()
                 if not purchase_total_str:
@@ -381,10 +382,8 @@ class SupplierAdvancesView:
             
             pay_remaining = self.app_pay_remaining_check.get()
             payment_method = PAY_TO_CODE[self.app_payment_cb.get()]
-            # --- CAMBIO: Se pasan notas vacías ---
             notes = ""
 
-            # Esta llamada REGISTRA EL PAGO RESTANTE EN CAJA (si aplica)
             self.controller.apply_advance(
                 self.selected_advance_id, app_date, purchase_total,
                 pay_remaining, payment_method, notes
@@ -401,16 +400,13 @@ class SupplierAdvancesView:
 
     def _delete_advance(self):
         """Elimina el anticipo seleccionado (y revierte la caja)."""
-        # --- CAMBIO: Se usa self.selected_advance_id en lugar de leer el árbol ---
         adv_id = self.selected_advance_id
         if not adv_id:
             messagebox.showwarning("Sin selección", "Por favor, seleccione un anticipo de la lista.")
             return
 
-        # Se usa self.selected_advance_data que ya se cargó al seleccionar
         adv = self.selected_advance_data
         if not adv:
-             # Fallback por si no se seleccionó
              adv = self.controller.get_advance(adv_id)
              if not adv:
                  messagebox.showerror("Error", "No se pudo encontrar el anticipo a eliminar.")
@@ -424,16 +420,127 @@ class SupplierAdvancesView:
             f"¿Está seguro de eliminar el anticipo ID {adv_id} por S/ {adv['total_amount']:.2f}?\n\n"):
             
             try:
-                # Esta llamada CREA UN INGRESO EN CAJA
                 self.controller.delete_advance(adv_id)
                 messagebox.showinfo("Éxito", "Anticipo eliminado.")
                 self.refresh_all()
             except Exception as e:
                 messagebox.showerror("Error al eliminar", str(e))
 
-    # --- CAMBIO: Se agregó el método placeholder para el PDF ---
+    # --- CAMBIO: Método _export_pdf implementado ---
     def _export_pdf(self):
-        """Placeholder para la futura función de exportar PDF."""
-        messagebox.showinfo("Función no implementada", 
-                            "La generación de reportes PDF para anticipos se implementará a futuro.",
-                            parent=self.parent)
+        """Exporta el historial filtrado de anticipos a un PDF."""
+        
+        if not REPORTLAB_OK:
+            messagebox.showerror("Error", "La librería ReportLab no está instalada.\n\nInstálala con: pip install reportlab")
+            return
+
+        try:
+            # 1. Obtener datos y filtros
+            start = self.start_de.get_date().strftime('%Y-%m-%d')
+            end = self.end_de.get_date().strftime('%Y-%m-%d')
+            status_map = {"Pendientes": "unpaid", "Aplicados": "applied", "Todos": "all"}
+            status_filter_es = self.current_status_filter_es
+            status_filter_en = status_map.get(status_filter_es, "all")
+            
+            advances = self.controller.get_all_advances(start, end, status_filter_en)
+
+            # 2. Pedir al usuario dónde guardar
+            default_name = f"reporte_anticipos_{start.replace('-','')}_{end.replace('-','')}.pdf"
+            path = filedialog.asksaveasfilename(
+                title="Guardar Reporte PDF",
+                initialfile=default_name,
+                defaultextension=".pdf",
+                filetypes=[("PDF Files", "*.pdf")]
+            )
+            if not path:
+                return # Usuario canceló
+
+            # 3. Crear el documento PDF
+            doc = SimpleDocTemplate(
+                path, pagesize=landscape(A4),
+                leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=20*mm
+            )
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Título y Metadatos
+            title = Paragraph("<b>Reporte de Anticipos a Proveedores</b>", styles['Title'])
+            meta_text = (
+                f"Período: <b>{start}</b> a <b>{end}</b> | "
+                f"Estado: <b>{status_filter_es}</b> | "
+                f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            )
+            meta = Paragraph(meta_text, styles['Normal'])
+            story += [title, Spacer(1, 4*mm), meta, Spacer(1, 6*mm)]
+
+            # 4. Preparar datos de la tabla
+            headers = ["ID", "Fecha", "Proveedor", "Monto", "Estado", "Fecha Aplic.", "Nota Anticipo"]
+            table_data = [headers]
+            
+            total_monto = 0.0
+
+            if not advances:
+                table_data.append(["(Sin registros para este período)", "", "", "", "", "", ""])
+            else:
+                for adv in advances:
+                    status_text = self.status_map_es.get(adv['status'], adv['status'])
+                    monto = float(adv['total_amount'])
+                    total_monto += monto
+                    
+                    table_data.append([
+                        adv['id'],
+                        adv['date_issued'],
+                        adv['supplier_name'],
+                        f"S/ {monto:,.2f}",
+                        status_text,
+                        adv['applied_at'] or 'N/A',
+                        adv['notes'] or ''
+                    ])
+
+            # 5. Añadir fila de totales
+            table_data.append([
+                "TOTALES", "", "", f"S/ {total_monto:,.2f}", "", "", ""
+            ])
+
+            # 6. Definir anchos de columna (en mm)
+            colWidths = [15*mm, 25*mm, 80*mm, 35*mm, 25*mm, 30*mm, 80*mm]
+            tbl = Table(table_data, colWidths=colWidths, repeatRows=1)
+
+            # 7. Aplicar estilos a la tabla
+            style = TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),      # Encabezado
+                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('ALIGN', (0,0), (-1,0), 'CENTER'),                 # Alineación encabezado
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,0), 10),
+                
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),          # Rejilla
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.whitesmoke, colors.transparent]),
+                
+                ('ALIGN', (0,1), (1,-1), 'CENTER'),                 # Col ID, Fecha
+                ('ALIGN', (3,1), (3,-1), 'RIGHT'),                  # Col Monto
+                ('ALIGN', (4,1), (5,-1), 'CENTER'),                 # Col Estado, Fecha Aplic.
+                ('ALIGN', (1,1), (2,-1), 'LEFT'),                   # Col Proveedor
+                ('ALIGN', (6,1), (6,-1), 'LEFT'),                   # Col Nota
+                
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),    # Fila de Totales
+                ('BACKGROUND', (0,-1), (-1,-1), colors.lightblue),
+                ('ALIGN', (3,-1), (3,-1), 'RIGHT'),                 # Total Monto
+            ])
+            tbl.setStyle(style)
+            story.append(tbl)
+            
+            # 8. Footer (número de página)
+            def footer(canvas, doc):
+                canvas.saveState()
+                canvas.setFont('Helvetica', 9)
+                canvas.drawRightString(doc.pagesize[0] - 15*mm, 10*mm, f"Página {doc.page}")
+                canvas.restoreState()
+
+            # 9. Construir el PDF
+            doc.build(story, onFirstPage=footer, onLaterPages=footer)
+            messagebox.showinfo("Exportar PDF", f"PDF generado correctamente:\n{path}")
+
+        except Exception as e:
+            messagebox.showerror("Error al Exportar PDF", f"No se pudo generar el PDF:\n{e}")

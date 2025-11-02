@@ -85,7 +85,7 @@ class EmployeesView:
         return int(self.tree.item(sel[0], "values")[0])
 
     def _new_employee_dialog(self):
-        win = tk.Toplevel(self.parent); win.title("Nuevo empleado"); win.geometry("360x220"); win.transient(self.parent); win.grab_set()
+        win = tk.Toplevel(self.parent); win.title("Nuevo empleado"); win.geometry("360x180"); win.transient(self.parent); win.grab_set() # Ajustar altura
         frm = ttk.Frame(win, padding=10); frm.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(frm, text="Nombre:").grid(row=0, column=0, sticky=tk.W, pady=4)
@@ -94,22 +94,24 @@ class EmployeesView:
         ttk.Label(frm, text="Apellido:").grid(row=1, column=0, sticky=tk.W, pady=4)
         e_last = ttk.Entry(frm); e_last.grid(row=1, column=1, sticky=tk.EW, pady=4)
 
-        ttk.Label(frm, text="Salario:").grid(row=2, column=0, sticky=tk.W, pady=4)
-        e_sal = ttk.Entry(frm); e_sal.grid(row=2, column=1, sticky=tk.EW, pady=4)
+        # *** CAMBIO: Se eliminan las líneas de Salario (Label y Entry) ***
+        # ttk.Label(frm, text="Salario:").grid(row=2, column=0, sticky=tk.W, pady=4)
+        # e_sal = ttk.Entry(frm); e_sal.grid(row=2, column=1, sticky=tk.EW, pady=4)
 
         def save():
             try:
-                self.controller.add_employee(e_first.get().strip(), e_last.get().strip(), float((e_sal.get() or "0").strip()))
+                # *** CAMBIO: Ya no se pasa el salario (se usa el default 0) ***
+                self.controller.add_employee(e_first.get().strip(), e_last.get().strip())
                 messagebox.showinfo("Empleados", "Empleado creado.")
                 # Notificar a otros módulos que un empleado ha cambiado
                 self.parent.winfo_toplevel().event_generate("<<EmployeeChanged>>")
                 win.destroy(); self.load_employees()
-            except ValueError:
-                messagebox.showerror("Error", "Salario inválido")
+            # *** CAMBIO: Se elimina el except ValueError específico de salario ***
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
-        btns = ttk.Frame(frm); btns.grid(row=3, column=0, columnspan=2, pady=8)
+        # *** CAMBIO: Ajustar el 'row' para los botones ***
+        btns = ttk.Frame(frm); btns.grid(row=2, column=0, columnspan=2, pady=8) # Antes era row=3
         ttk.Button(btns, text="Guardar", command=save).pack(side=tk.LEFT, padx=6)
         ttk.Button(btns, text="Cancelar", command=win.destroy).pack(side=tk.LEFT, padx=6)
         frm.columnconfigure(1, weight=1)

@@ -25,35 +25,49 @@ class ScrollFrame(ttk.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        # Frame interno donde van los widgets del módulo
         self.body = ttk.Frame(self.canvas)
         self._win_id = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
 
-        # Actualizar scrollregion cuando cambie el contenido
         self.body.bind("<Configure>", self._on_body_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
 
-        # Rueda del mouse
-        self._bind_mousewheel(self)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
 
     def _on_body_configure(self, event):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         if self.fit_width:
-            # Hacer que el interior ocupe el ancho del canvas (scroll solo vertical)
             self.canvas.itemconfigure(self._win_id, width=self.canvas.winfo_width())
 
     def _on_canvas_configure(self, event):
         if self.fit_width:
             self.canvas.itemconfigure(self._win_id, width=event.width)
+            
+    def _on_enter(self, event):
+        """Vincular eventos de rueda de mouse cuando el mouse entra al frame."""
+        self._bind_mousewheel(self)
+
+    def _on_leave(self, event):
+        """Desvincular eventos de rueda de mouse cuando el mouse sale del frame."""
+        self._unbind_mousewheel(self)
+
+    def _unbind_mousewheel(self, widget):
+        """Desvincula todos los eventos de la rueda del mouse."""
+        widget.unbind("<MouseWheel>")
+        widget.unbind("<Shift-MouseWheel>")
+        widget.unbind("<Button-4>")
+        widget.unbind("<Button-5>")
+        widget.unbind("<Shift-Button-4>")
+        widget.unbind("<Shift-Button-5>")
 
     # --- soporte rueda del mouse (Win/Mac/Linux) ---
     def _bind_mousewheel(self, widget):
-        widget.bind_all("<MouseWheel>", self._on_mousewheel_windows_mac, add="+")
-        widget.bind_all("<Shift-MouseWheel>", self._on_shift_mousewheel_windows_mac, add="+")
-        widget.bind_all("<Button-4>", self._on_mousewheel_linux_up, add="+")
-        widget.bind_all("<Button-5>", self._on_mousewheel_linux_down, add="+")
-        widget.bind_all("<Shift-Button-4>", self._on_shift_mousewheel_linux_up, add="+")
-        widget.bind_all("<Shift-Button-5>", self._on_shift_mousewheel_linux_down, add="+")
+        widget.bind("<MouseWheel>", self._on_mousewheel_windows_mac, add="+")
+        widget.bind("<Shift-MouseWheel>", self._on_shift_mousewheel_windows_mac, add="+")
+        widget.bind("<Button-4>", self._on_mousewheel_linux_up, add="+")
+        widget.bind("<Button-5>", self._on_mousewheel_linux_down, add="+")
+        widget.bind("<Shift-Button-4>", self._on_shift_mousewheel_linux_up, add="+")
+        widget.bind("<Shift-Button-5>", self._on_shift_mousewheel_linux_down, add="+")
 
     def _on_mousewheel_windows_mac(self, event):
         # Vertical

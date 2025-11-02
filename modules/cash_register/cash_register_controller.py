@@ -181,3 +181,14 @@ class CashRegisterController:
         
         results = self.db.execute_query(query, (str(year),))
         return [dict(row) for row in results] if results else []
+    
+    def get_transaction_by_id(self, transaction_id):
+        """Obtener una transacción específica por su ID."""
+        query = """
+            SELECT cr.*, u.username
+            FROM cash_register cr
+            LEFT JOIN users u ON cr.user_id = u.id
+            WHERE cr.id = ?
+        """
+        results = self.db.execute_query(query, (transaction_id,))
+        return dict(results[0]) if results else None

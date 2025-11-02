@@ -34,7 +34,7 @@ class MainWindow:
         try:
             icon_image = Image.open("assets/icons/iconoPapa.png")
             w, h = icon_image.size
-            max_size = 64
+            max_size = 100
             scale = min(max_size / w, max_size / h)
             new_w, new_h = int(w * scale), int(h * scale)
             icon_image = icon_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
@@ -61,20 +61,29 @@ class MainWindow:
     def setup_menu(self):
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
+        
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Archivo", menu=file_menu)
         file_menu.add_command(label="Cerrar Sesión", command=self.logout)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.safe_exit)
+        
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Ver", menu=view_menu)
         view_menu.add_command(label="Actualizar Pestaña", command=self.refresh_current_tab)
+        
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Ayuda", menu=help_menu)
+        help_menu.add_command(label="Contacto / Acerca de", command=self.show_about)
+
         if self.auth_manager.has_permission('admin'):
             admin_menu = tk.Menu(menubar, tearoff=0)
             menubar.add_cascade(label="Administración", menu=admin_menu)
             admin_menu.add_command(label="Gestión de Usuarios", command=self.show_user_management)
-    
-    # --- setup_toolbar() ELIMINADO COMPLETAMENTE ---
+            
+            admin_menu.add_separator()
+            admin_menu.add_command(label="Crear Backup BD", command=self.backup_database)
+            admin_menu.add_command(label="Restaurar Backup BD", command=self.restore_backup)
     
     def setup_notebook(self):
         self.notebook = ttk.Notebook(self.root)
@@ -235,27 +244,36 @@ class MainWindow:
                   command=dialog.destroy).pack(pady=20)
     
     def show_about(self):
-        """Mostrar diálogo Acerca de"""
-        about_text = """
-        PapaSoft - Sistema de Gestión Integral
         
-        Versión: 1.0.0
+        presentacion = """
+        ¡Hola! Soy el desarrollador de esta aplicación.
+        Especializado en crear soluciones de software a medida
+        para la gestión de negocios e inventarios.
+        """
+        
+        contacto = """
         Desarrollado por: JHOSSEF NICOLAS CONSTAIN NIEVES
         Numero: 3233585649
         Correo: niconstain@gmail.com
-        
-        Características:
-        • Gestión de Caja
-        • Control de Préstamos
-        • Inventario de Papa
-        • Ventas
-        • Reportes y Gráficos
-        • Sistema de Notificaciones
         """
-        messagebox.showinfo("Acerca de PapaSoft", about_text)
+
+        app_info = """
+        PapaSoft - Sistema de Gestión Integral
+        Versión: 1.0.0
+        """
+        
+        about_text = f"""
+        {presentacion}
+        
+        -------------------------------------
+        {contacto}
+        
+        -------------------------------------
+        {app_info}
+        """
+        messagebox.showinfo("Contacto / Acerca de PapaSoft", about_text)
     
     def safe_exit(self):
-        """Cierre seguro de la aplicación"""
         if messagebox.askokcancel("Salir", "¿Está seguro de que desea salir de PapaSoft?"):
             self.notification_system.stop()
             if hasattr(self.db, 'close'):
@@ -263,7 +281,6 @@ class MainWindow:
             sys.exit(0)
     
     def logout(self):
-        """Cerrar sesión y volver a la ventana de login"""
         if messagebox.askokcancel("Cerrar Sesión", "¿Está seguro de que desea cerrar sesión?"):
             self.notification_system.stop()
             self.auth_manager.current_user = None
@@ -271,37 +288,44 @@ class MainWindow:
             self.root.destroy()
     
     def show_user_management(self):
-        """Mostrar gestión de usuarios (solo admin)"""
         self.auth_manager.show_user_management(self.root)
     
     def backup_database(self):
-        """Realizar backup de la base de datos"""
+        """Realizar backup de la base de datos (preguntando dónde guardarlo)"""
         import shutil
         import os
         from datetime import datetime
-        
+        # --- CAMBIO: Importar el filedialog ---
+        from tkinter import filedialog
+
         try:
-            backup_dir = "backups"
-            if not os.path.exists(backup_dir):
-                os.makedirs(backup_dir)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_file = os.path.join(backup_dir, f"papasoft_backup_{timestamp}.db")
+            default_name = f"papasoft_backup_{timestamp}.db"
+
+            backup_file_path = filedialog.asksaveasfilename(
+                title="Guardar Backup de Base de Datos",
+                initialfile=default_name,
+                defaultextension=".db",
+                filetypes=[("Database files", "*.db"), ("All files", "*.*")]
+            )
+
+            if not backup_file_path:
+                return 
             
-            shutil.copy2("papasoft.db", backup_file)
-            messagebox.showinfo("Backup Exitoso", f"Backup creado en: {backup_file}")
-            
+            shutil.copy2("papasoft.db", backup_file_path)
+            messagebox.showinfo("Backup Exitoso", f"Backup creado en: {backup_file_path}")
+
             self.notification_center.add_notification(
                 "Backup Realizado",
-                f"Se creó un backup de la base de datos: {backup_file}",
+                f"Se creó un backup de la base de datos: {os.path.basename(backup_file_path)}",
                 "info"
             )
-            
+
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo crear el backup: {str(e)}")
     
     def restore_backup(self):
-        """Restaurar backup de la base de datos"""
         import shutil
         import os
         from tkinter import filedialog

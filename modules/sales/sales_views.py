@@ -13,6 +13,18 @@ from datetime import datetime, timedelta
 
 from modules.sales.sales_controller import SalesController
 
+# --- CAMBIO: Importaciones para PDF ---
+try:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
+# --- FIN CAMBIO ---
+
 PAY_TO_CODE = {"Efectivo": "cash", "Transferencia": "transfer"}
 CODE_TO_PAY = {"cash": "Efectivo", "transfer": "Transferencia"}
 
@@ -28,7 +40,7 @@ class SalesView:
 
         self._build_ui()
         self.refresh_all(load_history=False)
-        self._load_sales()
+        self._load_sales() # Cargar historial al inicio
 
     def _build_ui(self):
         container = ttk.Frame(self.parent, padding=8)
@@ -53,10 +65,11 @@ class SalesView:
         self.type_cb.bind("<<ComboboxSelected>>", self._on_type_selected)
         row += 1
 
-        self.other_type_lbl = ttk.Label(left, text="Nombre Otro:")
-        self.other_type_entry = ttk.Entry(left)
-        self.other_quality_lbl = ttk.Label(left, text="Calidad Otro:")
-        self.other_quality_entry = ttk.Entry(left)
+        # --- CAMBIO: Eliminada la lógica de "Otro..." (Requerimiento #9) ---
+        # self.other_type_lbl = ttk.Label(left, text="Nombre Otro:")
+        # self.other_type_entry = ttk.Entry(left)
+        # self.other_quality_lbl = ttk.Label(left, text="Calidad Otro:")
+        # self.other_quality_entry = ttk.Entry(left)
 
         ttk.Label(left, text="Calidad:").grid(row=row, column=0, sticky=tk.W, pady=2)
         self.quality_cb = ttk.Combobox(left, state="readonly")
@@ -149,7 +162,9 @@ class SalesView:
         self.f_type.bind("<<ComboboxSelected>>", on_filter_type_change)
 
         ttk.Button(filters, text="Aplicar", command=self._load_sales).grid(row=0, column=8, padx=(8, 4))
-        ttk.Button(filters, text="Exportar PDF", command=self._export_pdf).grid(row=0, column=9, padx=(4, 0))
+        ttk.Button(filters, text="Exportar PDF", command=self._export_pdf).grid(row=0, column=9, padx=(4, 0), sticky=tk.E)
+        
+        filters.columnconfigure(9, weight=1) # Empujar PDF a la derecha
 
         sales_frame = ttk.LabelFrame(right, text="Historial de ventas", padding=(6, 6, 6, 6))
         sales_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
@@ -198,11 +213,12 @@ class SalesView:
             self.products_data = self.controller.inv.get_all_products()
             product_names = sorted(list(self.products_data.keys()))
             
-            self.type_cb['values'] = (*product_names, "Otro...")
+            # --- CAMBIO: Ya no se añade "Otro..." ---
+            self.type_cb['values'] = tuple(product_names)
             if product_names:
                 self.type_cb.set(product_names[0])
             else:
-                self.type_cb.set("Otro...")
+                self.type_cb.set("")
 
             self.f_type['values'] = ("", *product_names)
             self.f_type.set("")
@@ -212,27 +228,10 @@ class SalesView:
     def _on_type_selected(self, _evt=None):
         selected = self.type_cb.get()
 
-        self.other_type_lbl.grid_remove()
-        self.other_type_entry.grid_remove()
-        self.other_quality_lbl.grid_remove()
-        self.other_quality_entry.grid_remove()
-        self.quality_cb.grid()
-
-        if selected == "Otro...":
-            self.quality_cb.grid_remove()
-            row_idx = self.quality_cb.grid_info().get('row', 2)
-            
-            self.other_type_lbl.grid(row=row_idx, column=0, sticky=tk.W, pady=2)
-            self.other_type_entry.grid(row=row_idx, column=1, sticky=tk.EW, pady=2, padx=(5,0))
-            self.other_quality_lbl.grid(row=row_idx + 1, column=0, sticky=tk.W, pady=2)
-            self.other_quality_entry.grid(row=row_idx + 1, column=1, sticky=tk.EW, pady=2, padx=(5,0))
-            
-            self.quality_cb.set('')
-            self.other_type_entry.focus()
-        else:
-            qualities = self.products_data.get(selected, [])
-            self.quality_cb['values'] = tuple(qualities)
-            self.quality_cb.set(qualities[0] if qualities else "")
+        # --- CAMBIO: Eliminada la lógica de "Otro..." ---
+        qualities = self.products_data.get(selected, [])
+        self.quality_cb['values'] = tuple(qualities)
+        self.quality_cb.set(qualities[0] if qualities else "")
         
         self._on_combo_change()
 
@@ -241,13 +240,9 @@ class SalesView:
         self._refresh_stock_labels()
 
     def _get_form_product_data(self) -> tuple[str, str]:
-        selected_type = self.type_cb.get()
-        if selected_type == "Otro...":
-            product = self.other_type_entry.get().strip()
-            quality = self.other_quality_entry.get().strip()
-        else:
-            product = selected_type
-            quality = self.quality_cb.get()
+        # --- CAMBIO: Eliminada la lógica de "Otro..." ---
+        product = self.type_cb.get()
+        quality = self.quality_cb.get()
         return product, quality
 
     def _apply_price_state(self, disable_when_auto: bool):
@@ -289,8 +284,9 @@ class SalesView:
         self.qty_entry.delete(0, tk.END)
         self.customer_entry.delete(0, tk.END)
         self.notes_entry.delete(0, tk.END)
-        self.other_type_entry.delete(0, tk.END)
-        self.other_quality_entry.delete(0, tk.END)
+        # --- CAMBIO: Eliminada la lógica de "Otro..." ---
+        # self.other_type_entry.delete(0, tk.END)
+        # self.other_quality_entry.delete(0, tk.END)
         self.payment_cb.set("Efectivo")
         self.add_to_cash.set(True)
         self.manual_price.set(False)
@@ -299,7 +295,7 @@ class SalesView:
 
     def _create_sale(self):
         try:
-            date = self.date_entry.get_date().strftime("%Y-%m-%d")
+            date = self.date_entry.get_date().strftime("%Y-m-d")
             product, quality = self._get_form_product_data()
 
             if not product or not quality:
@@ -378,16 +374,131 @@ class SalesView:
         except Exception as e:
             messagebox.showerror("Historial de ventas", str(e))
 
+    # --- CAMBIO: Método _export_pdf implementado ---
     def _export_pdf(self):
-        # (Este método requeriría reportlab, lo dejo conceptualmente)
-        start, end, t, q = self._get_filters()
+        """Exporta el historial filtrado de Ventas a un PDF."""
+        
+        if not REPORTLAB_OK:
+            messagebox.showerror("Error", "La librería ReportLab no está instalada.\n\nInstálala con: pip install reportlab")
+            return
+            
         try:
-            data, totals = self.controller.get_sales_report(start, end, t, q)
-            # ... lógica para generar el PDF ...
-            # Cambiar 'potato_type' por 'product_name' al crear la tabla de datos
-            messagebox.showinfo("PDF", "Funcionalidad de exportar PDF lista para implementar.")
+            # 1. Obtener datos y filtros
+            start, end, t, q = self._get_filters()
+            
+            # Obtener nombres de filtros para el título
+            product_filter = t.capitalize() if t else "Todos"
+            quality_filter = q.capitalize() if q else "Todas"
+            
+            rows, totals = self.controller.get_sales_report(start, end, t, q)
+
+            # 2. Pedir al usuario dónde guardar
+            default_name = f"reporte_ventas_{start.replace('-','')}_{end.replace('-','')}.pdf"
+            path = filedialog.asksaveasfilename(
+                title="Guardar Reporte PDF",
+                initialfile=default_name,
+                defaultextension=".pdf",
+                filetypes=[("PDF Files", "*.pdf")]
+            )
+            if not path:
+                return # Usuario canceló
+
+            # 3. Crear el documento PDF
+            doc = SimpleDocTemplate(
+                path, pagesize=landscape(A4),
+                leftMargin=10*mm, rightMargin=10*mm, topMargin=15*mm, bottomMargin=20*mm
+            )
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Título y Metadatos
+            title = Paragraph("<b>Reporte de Ventas</b>", styles['Title'])
+            meta_text = (
+                f"Período: <b>{start}</b> a <b>{end}</b> | "
+                f"Producto: <b>{product_filter}</b> | Calidad: <b>{quality_filter}</b> | "
+                f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            )
+            meta = Paragraph(meta_text, styles['Normal'])
+            story += [title, Spacer(1, 4*mm), meta, Spacer(1, 6*mm)]
+
+            # 4. Preparar datos de la tabla
+            headers = ["Fecha", "Producto", "Calidad", "Bultos", "Precio U.", "Total", "Cliente", "Pago", "Usuario", "Notas"]
+            table_data = [headers]
+
+            if not rows:
+                table_data.append(["(Sin registros para este período)", "", "", "", "", "", "", "", "", ""])
+            else:
+                for r in rows:
+                    pay = r.get('payment_method')
+                    pay_disp = CODE_TO_PAY.get(pay, '—') if pay else '—'
+                    table_data.append([
+                        r['date'],
+                        r['product_name'].capitalize(),
+                        r['quality'].capitalize(),
+                        int(r['quantity']),
+                        f"${float(r['unit_price']):.2f}",
+                        f"${float(r['total_value']):.2f}",
+                        r.get('supplier_customer') or '',
+                        pay_disp,
+                        r.get('username') or '',
+                        r.get('notes') or ''
+                    ])
+
+            # 5. Añadir fila de totales
+            table_data.append([
+                "TOTALES", "", "",
+                f"{int(totals['quantity'])}", # Total Bultos
+                "",
+                f"${float(totals['amount']):,.2f}", # Total Monto
+                "", "", "", ""
+            ])
+
+            # 6. Definir anchos de columna (en mm) - 10 columnas
+            colWidths = [22*mm, 26*mm, 25*mm, 15*mm, 25*mm, 25*mm, 35*mm, 20*mm, 25*mm, 60*mm]
+            tbl = Table(table_data, colWidths=colWidths, repeatRows=1)
+
+            # 7. Aplicar estilos a la tabla
+            style = TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),      # Encabezado
+                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('ALIGN', (0,0), (-1,0), 'CENTER'),                 # Alineación encabezado
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,0), 9),
+                
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),          # Rejilla
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('ROWBACKGROUNDS', (0,1), (-1,-2), [colors.whitesmoke, colors.transparent]),
+                
+                ('ALIGN', (0,1), (0,-1), 'CENTER'),                 # Col Fecha
+                ('ALIGN', (3,1), (3,-1), 'CENTER'),                 # Col Bultos
+                ('ALIGN', (4,1), (5,-1), 'RIGHT'),                  # Cols Montos
+                ('ALIGN', (7,1), (7,-1), 'CENTER'),                 # Col Pago
+                ('ALIGN', (1,1), (2,-1), 'LEFT'),                   # Col Producto, Calidad
+                ('ALIGN', (6,1), (6,-1), 'LEFT'),                   # Col Cliente
+                ('ALIGN', (8,1), (9,-1), 'LEFT'),                   # Col Usuario, Notas
+                
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),    # Fila de Totales
+                ('BACKGROUND', (0,-1), (-1,-1), colors.lightblue),
+                ('ALIGN', (3,-1), (3,-1), 'CENTER'),                # Total Bultos
+                ('ALIGN', (5,-1), (5,-1), 'RIGHT'),                 # Total Monto
+            ])
+            tbl.setStyle(style)
+            story.append(tbl)
+            
+            # 8. Footer (número de página)
+            def footer(canvas, doc):
+                canvas.saveState()
+                canvas.setFont('Helvetica', 9)
+                canvas.drawRightString(doc.pagesize[0] - 10*mm, 10*mm, f"Página {doc.page}")
+                canvas.restoreState()
+
+            # 9. Construir el PDF
+            doc.build(story, onFirstPage=footer, onLaterPages=footer)
+            messagebox.showinfo("Exportar PDF", f"PDF generado correctamente:\n{path}")
+
         except Exception as e:
-            messagebox.showerror("Reporte de Ventas", f"Error obteniendo datos: {e}")
+            messagebox.showerror("Error al Exportar PDF", f"No se pudo generar el PDF:\n{e}")
+
 
     def refresh_all(self, load_history=True):
         self._load_product_list()
